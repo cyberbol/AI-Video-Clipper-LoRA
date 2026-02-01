@@ -1,3 +1,13 @@
+Major Stability Update: Rewritten installer logic to prevent "Dependency Hell" with WhisperX.
+
+Future-Proof: Added native support for RTX 5090 (Blackwell) via PyTorch Nightly & CUDA 13.0.
+
+Upgraded Core: Now using PyTorch 2.8.0 and CUDA 12.6 for standard cards (4090/3090).
+
+Clean Install: No more red errors during installation!
+
+
+
 # 👁️🐧 AI Video Clipper & LoRA Captioner
 
 **Created by: Cyberbol**
@@ -94,3 +104,4 @@ If you want to change the style of the AI descriptions (e.g., make them shorter,
 <div align="center">
   <b>Created by: Cyberbol</b>
 </div>
+
