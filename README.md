@@ -1,9 +1,7 @@
 # 👁️🐧 AI Video Clipper & LoRA Captioner (v3.7)
 
-![Demo](images/demo.webp)
-
-**The ultimate automated dataset creation tool.**
-*Auto-slicing, Transcribing, and Vision Captioning for LoRA/LyCORIS training.*
+**The most flexible automated dataset creator for Video LoRA training.**
+*Now featuring Project Management, Bulk Video Mode, and Auto-Updates.*
 
 ---
 
@@ -60,17 +58,7 @@ If you want to receive new features automatically:
     ./run.sh
     ```
 
-### ☁️ Cloud / RunPod
-For those who prefer processing datasets on high-VRAM cloud GPUs, an illustrated [RunPod Deployment Guide](RUNPOD-HOWTO.md) is available to walk you through the setup.
-
----
-
-## ⚙️ How to Use
-1.  **Select Mode:** Choose between *Video Auto-Clipper* or *Image Folder Captioner*.
-2.  **Choose Model:** Select **7B** (Quality) or **2B** (Speed) in the sidebar.
-3.  **Custom Prompt (Optional):** In the sidebar, you can define how the AI should describe the scene (e.g., *"Focus on lighting and camera angle"*).
-4.  **Upload Video / Select Folder.**
-5.  **Click START.**
+*Note: The execute bit is already set. Ensure you have **ffmpeg** installed via your distribution's package manager.*
 
 ---
 <div align="center">

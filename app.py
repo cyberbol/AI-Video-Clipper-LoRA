@@ -1,5 +1,5 @@
 # --------------------------------------------------------------------------------
-# AI Video Clipper & LoRA Captioner (v3.7 - UI Flow Fix)
+# AI Video Clipper & LoRA Captioner (v3.7)
 # 🏆 CREDITS: Cyberbol (Logic), FNGarvin (Engine), WildSpeaker (5090 Fix)
 # --------------------------------------------------------------------------------
 
@@ -46,7 +46,7 @@ os.makedirs(MODELS_DIR, exist_ok=True)
 os.environ["HF_HOME"] = MODELS_DIR
 
 # --- 3. UI CONFIG ---
-st.set_page_config(page_title="AI Clipper v3.7 (Ultimate)", layout="wide")
+st.set_page_config(page_title="AI Clipper v3.7", layout="wide")
 st.title("👁️🐧 AI Video Clipper & LoRA Captioner")
 st.markdown("v3.7 | Created by: **Cyberbol** | Engine: **FNGarvin** (UV) | 5090 Fix: **WildSpeaker**")
 
@@ -124,18 +124,36 @@ if app_mode == "🎥 Video Auto-Clipper":
     with t_col1: tol_minus = st.number_input("Tolerance Margin - (sec)", 0.0, 5.0, 0.0)
     with t_col2: tol_plus = st.number_input("Tolerance Margin + (sec)", 0.0, 10.0, 0.5)
     
-    if uploaded_file and st.button("🚀 START PROCESSING"):
+    # --- NOWA SEKCJA Z LICZNIKIEM ---
+    # Używamy kolumn, aby umieścić licznik obok przycisku
+    col_btn, col_timer = st.columns([1, 4])
+    with col_btn:
+        start_processing = st.button("🚀 START PROCESSING")
+    with col_timer:
+        timer_placeholder = st.empty() # To jest miejsce na Twój licznik
+    # --------------------------------
+
+    if uploaded_file and start_processing:
+        start_ts = time.time() # START CZASU
+        timer_placeholder.info("⏱️ Processing started...")
+        
         status_box = st.empty()
         status_box.info("🚀 **Phase 1/2: Initializing Audio Analysis...** WhisperX is starting up.")
         with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp:
             tmp.write(uploaded_file.read()); video_path = tmp.name
         try:
             status_box.info("⏳ **Phase 1/2: Analyzing Speech & Timestamps...** Finding the best clips.")
+            
+            # --- FAZA WHISPER (Performance Fix) ---
             model_w = whisperx.load_model("large-v3", device, compute_type="float16", download_root=MODELS_DIR)
-            audio = whisperx.load_audio(video_path); result = model_w.transcribe(audio, batch_size=16)
+            audio = whisperx.load_audio(video_path)
+            result = model_w.transcribe(audio, batch_size=16)
             model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=device)
             result = whisperx.align(result["segments"], model_a, metadata, audio, device)
-            del model_w, model_a; clear_vram()
+            
+            # CLEANUP
+            del model_w, model_a, audio, metadata
+            clear_vram()
             
             segments = [s for s in result["segments"] if (target_dur - tol_minus) <= (s['end'] - s['start']) <= (target_dur + tol_plus)]
             
@@ -143,25 +161,45 @@ if app_mode == "🎥 Video Auto-Clipper":
                 status_box.empty()
                 folder_name = project_name.strip() if project_name.strip() else f"dataset_{target_dur}s"
                 out_dir = os.path.join(BASE_DIR, folder_name); os.makedirs(out_dir, exist_ok=True)
-                v_model, v_proc = load_vision_models(); video_f = VideoFileClip(video_path)
+                
+                v_model, v_proc = load_vision_models()
+                video_f = VideoFileClip(video_path)
                 st.success(f"Found {len(segments)} clips. Saving to: {out_dir}")
                 prog = st.progress(0)
+                
                 for i, seg in enumerate(segments[:100]):
                     base = f"clip_{i+1:03d}"; c_path = os.path.join(out_dir, f"{base}.mp4")
                     sub = video_f.subclipped(seg['start'], seg['end'])
-                    if not keep_orig: sub = sub.resized(new_size=(out_width, out_height)).write_videofile(c_path, codec="libx264", audio_codec="aac", fps=out_fps, preset="medium", logger=None)
-                    else: sub.write_videofile(c_path, codec="libx264", audio_codec="aac", preset="medium", logger=None)
+                    
+                    if not keep_orig:
+                        sub = sub.resized(new_size=(out_width, out_height))
+                        sub.write_videofile(c_path, codec="libx264", audio_codec="aac", fps=out_fps, preset="medium", logger=None)
+                    else:
+                        sub.write_videofile(c_path, codec="libx264", audio_codec="aac", preset="medium", logger=None)
+                    
                     cap = caption_content(c_path, "video", v_model, v_proc, lora_trigger, user_instruction, SELECTED_MODEL_ID)
                     speech = seg['text'].strip()
                     with open(os.path.join(out_dir, f"{base}.txt"), "w", encoding="utf-8") as f: f.write(f"{cap} The person says: \"{speech}\"")
                     with st.expander(f"✅ {base}"):
                         st.video(c_path); st.info(f"💬 **Speech:** {speech}")
                     prog.progress((i+1)/len(segments))
+                
                 video_f.close()
-                st.success("✅ DONE! Processing finished successfully.") # DODANO: Napis DONE
+                del v_model, v_proc
+                clear_vram()
+                
+                st.success("✅ DONE! Processing finished successfully.")
+                
+                # --- KONIEC CZASU I WYNIK ---
+                end_ts = time.time()
+                total_seconds = end_ts - start_ts
+                mins, secs = divmod(total_seconds, 60)
+                timer_placeholder.success(f"⏱️ Total Time: {int(mins)}m {int(secs)}s")
+                # -----------------------------
             else:
                 st.warning("No segments found matching those exact duration margins.")
                 status_box.empty()
+                timer_placeholder.empty()
         finally:
             clear_vram(); 
             if os.path.exists(video_path): os.unlink(video_path)
@@ -170,11 +208,12 @@ elif app_mode == "📝 Bulk Video Captioner":
     if 'v_bulk_path' not in st.session_state: st.session_state['v_bulk_path'] = ""
     col_v, col_vbtn = st.columns([3, 1])
     with col_vbtn:
-        if st.button("📂 Select Folder"): # NAPRAWIONE: Teraz tylko po kliknięciu
+        if st.button("📂 Select Folder"):
             sel = select_folder_dialog()
             if sel: st.session_state['v_bulk_path'] = sel; st.rerun()
     with col_v: v_dir = st.text_input("Folder Path:", value=st.session_state['v_bulk_path'])
     if st.button("🚀 START BULK CAPTIONING") and os.path.exists(v_dir):
+        start_ts = time.time() # Start czasu dla Bulk
         v_model, v_proc = load_vision_models()
         videos = [f for f in os.listdir(v_dir) if f.lower().endswith((".mp4", ".mkv"))]
         prog = st.progress(0)
@@ -182,18 +221,26 @@ elif app_mode == "📝 Bulk Video Captioner":
             p = os.path.join(v_dir, v_name); cap = caption_content(p, "video", v_model, v_proc, lora_trigger, user_instruction, SELECTED_MODEL_ID)
             with open(os.path.splitext(p)[0] + ".txt", "w", encoding="utf-8") as f: f.write(cap)
             prog.progress((i+1)/len(videos))
-        st.success("✅ DONE! Bulk Captioning finished.") # DODANO: Napis DONE
+        
+        del v_model, v_proc
+        st.success("✅ DONE! Bulk Captioning finished.")
+        
+        # Czas dla Bulk
+        total_seconds = time.time() - start_ts
+        mins, secs = divmod(total_seconds, 60)
+        st.info(f"⏱️ Total Execution Time: {int(mins)}m {int(secs)}s")
         clear_vram()
 
 else: # IMAGE CAPTIONER
     if 'img_path' not in st.session_state: st.session_state['img_path'] = ""
     col_p, col_b = st.columns([3, 1])
     with col_b:
-        if st.button("📂 Select Folder"): # NAPRAWIONE: Teraz tylko po kliknięciu
+        if st.button("📂 Select Folder"):
             sel = select_folder_dialog()
             if sel: st.session_state['img_path'] = sel; st.rerun()
     with col_p: img_dir = st.text_input("Path:", value=st.session_state['img_path'])
     if st.button("🚀 CAPTION FOLDER") and os.path.exists(img_dir):
+        start_ts = time.time() # Start czasu dla Images
         v_model, v_proc = load_vision_models()
         imgs = [f for f in os.listdir(img_dir) if f.lower().endswith((".png", ".jpg", ".webp"))]
         prog = st.progress(0)
@@ -201,7 +248,14 @@ else: # IMAGE CAPTIONER
             p = os.path.join(img_dir, name); cap = caption_content(p, "image", v_model, v_proc, lora_trigger, user_instruction, SELECTED_MODEL_ID)
             with open(os.path.splitext(p)[0] + ".txt", "w", encoding="utf-8") as f: f.write(cap)
             prog.progress((i+1)/len(imgs))
-        st.success("✅ DONE! Folder Captioning finished.") # DODANO: Napis DONE
+        
+        del v_model, v_proc
+        st.success("✅ DONE! Folder Captioning finished.")
+        
+        # Czas dla Images
+        total_seconds = time.time() - start_ts
+        mins, secs = divmod(total_seconds, 60)
+        st.info(f"⏱️ Total Execution Time: {int(mins)}m {int(secs)}s")
         clear_vram()
 
 st.markdown("---")
