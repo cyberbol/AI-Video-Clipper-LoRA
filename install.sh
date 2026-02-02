@@ -13,11 +13,21 @@ echo "======================================================================"
 echo "         AI VIDEO CLIPPER & LORA CAPTIONER - INSTALLER (Linux/WSL)"
 echo "======================================================================"
 
+# Check for FFmpeg (Linux)
+if ! command -v ffmpeg &> /dev/null; then
+    echo "[ERROR] FFmpeg is missing!"
+    echo "This tool requires FFmpeg to process video/audio."
+    echo "Please install it using your package manager, e.g.:"
+    echo "  sudo apt update && sudo apt install -y ffmpeg"
+    exit 1
+fi
+
 # Check for uv
 if ! command -v uv &> /dev/null; then
     echo "[INFO] Installing uv..."
     curl -LsSf https://astral.sh/uv/install.sh | sh
     source $HOME/.cargo/env
+    export PATH="$PATH:$HOME/.cargo/bin:$HOME/.local/bin"
 fi
 
 echo "[STEP 1/3] Preparing Environment..."

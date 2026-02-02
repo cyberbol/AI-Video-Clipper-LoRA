@@ -16,6 +16,7 @@ It includes **two Vision Models** that you can switch between inside the app:
 
 ## ⚙️ Prerequisites
 - **Git**
+- **FFmpeg** (Included in Windows installer; requires `sudo apt install ffmpeg` on Linux)
 - **NVIDIA Drivers** (CUDA 12.8+)
 - **Internet Connection** (for initial model and environment setup)
 

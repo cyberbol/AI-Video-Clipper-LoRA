@@ -55,8 +55,45 @@ if %errorlevel% neq 0 (
 
 echo.
 echo [STEP 1/3] Preparing isolated environment (uv)...
-if not exist ".venv" (
     uv venv .venv --python 3.10 --link-mode hardlink
+)
+
+:: --------------------------------------------------------------------
+:: [STEP 1.5] FFmpeg Installation & Path Refresh
+:: --------------------------------------------------------------------
+where ffmpeg >nul 2>&1
+if %errorlevel% neq 0 (
+    echo.
+    echo [INFO] FFmpeg not found. Installing via winget...
+    winget install Gyan.FFmpeg --accept-source-agreements --accept-package-agreements
+    
+    :: ATTEMPT DYNAMIC PATH REFRESH
+    :: 1. Standard Winget Links (Symlinks)
+    if exist "%LOCALAPPDATA%\Microsoft\WinGet\Links\ffmpeg.exe" (
+        set "PATH=%LOCALAPPDATA%\Microsoft\WinGet\Links;%PATH%"
+        echo [INFO] Added Winget Links to PATH for this session.
+    )
+
+    :: 2. Robust Search for Gyan.FFmpeg Package (Deep Search)
+    :: User Path: %LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg_...\ffmpeg-*-full_build\bin
+    for /d %%P in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg_*") do (
+        echo [INFO] Found Legacy Package: %%~nxP
+        for /d %%B in ("%%P\ffmpeg-*-full_build") do (
+             if exist "%%B\bin\ffmpeg.exe" (
+                 set "PATH=%%B\bin;%PATH%"
+                 echo [INFO] Added Deep FFmpeg Path: %%B\bin
+             )
+        )
+    )
+    
+    :: Verify
+    where ffmpeg >nul 2>&1
+    if %errorlevel% neq 0 (
+        echo [WARNING] FFmpeg installed but not detected in current session.
+        echo [IMPORTANT] You may need to RESTART your terminal/PC before running the app.
+    ) else (
+        echo [SUCCESS] FFmpeg detected!
+    )
 )
 
 :: Privacy Configuration (On-the-fly)
