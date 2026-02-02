@@ -44,15 +44,11 @@ This project is a collaborative effort driven by the open-source community:
 
 ### 🐧 Linux / WSL
 1.  Open a terminal in the project folder.
-2.  Make scripts executable:
-    ```bash
-    chmod +x install.sh run.sh
-    ```
-3.  Run the installer:
+2.  Run the installer:
     ```bash
     ./install.sh
     ```
-4.  Start the app:
+3.  Start the app:
     ```bash
     ./run.sh
     ```
