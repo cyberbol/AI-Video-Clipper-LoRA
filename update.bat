@@ -1,7 +1,7 @@
 @echo off
 title AI Video Clipper - Updater
 echo ---------------------------------------
-echo 👁️🐧 AI Video Clipper & LoRA Captioner
+echo AI Video Clipper ^& LoRA Captioner
 echo Checking for updates...
 echo ---------------------------------------
 
