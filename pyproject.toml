@@ -1,0 +1,22 @@
+[project]
+name = "AI-Video-Clipper-LoRA"
+version = "1.0.0"
+description = "AI Video Clipper & LoRA Captioner"
+authors = [{ name = "Cyberbol" }]
+dependencies = [
+    "qwen-vl-utils",
+    "accelerate",
+    "transformers>=4.45.0",
+    "streamlit",
+    "moviepy",
+    "pillow<11.0",
+    "faster-whisper",
+    "fairscale",
+    "nltk",
+    "pandas",
+    "soundfile",
+    "requests",
+    "tqdm",
+    "pyannote.audio",
+]
+requires-python = ">=3.10"
