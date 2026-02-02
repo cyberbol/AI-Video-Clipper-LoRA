@@ -1,75 +1,73 @@
-# 👁️🐧 AI Video Clipper & LoRA Captioner
+# 👁️🐧 AI Video Clipper & LoRA Captioner (v3.5)
 
 ![Demo](demo.webp)
 
-## 📖 Description
-This tool is a powerful automation suite designed for creating **AI training datasets (LoRA/Fine-tuning)**. 
-It automatically detects speech segments in long videos using **WhisperX**, clips them, and generates detailed captions combining:
-1.  **Audio Transcription** (what the person says).
-2.  **Visual Description** (what the scene looks like) using **Qwen2-VL**.
-
-It includes **two Vision Models** that you can switch between inside the app:
-* **Qwen2-VL-7B:** High quality, detailed descriptions (Requires ~16GB VRAM/RAM loading).
-* **Qwen2-VL-2B:** Extremely fast, slightly less detailed (Requires ~5GB VRAM/RAM loading).
+**The ultimate automated dataset creation tool.**
+*Auto-slicing, Transcribing, and Vision Captioning for LoRA/LyCORIS training.*
 
 ---
 
-## ⚙️ Prerequisites
-- **Git**
-- **FFmpeg** (Included in Windows installer; requires `sudo apt install ffmpeg` on Linux)
-- **NVIDIA Drivers** (CUDA 12.8+)
-- **Internet Connection** (for initial model and environment setup)
+### 🏆 PROJECT CREDITS
+This project is a collaborative effort driven by the open-source community:
 
-*Note: This project uses `uv` to automatically manage its own Python 3.10 environment and dependencies. You do not need to install Python or Build Tools manually.*
+* **[Cyberbol](https://github.com/cyberbol):** **Original Creator & Logic.** Designed the UI, "Strict Mode" filtering, dynamic folder logic, and Vision Prompt engineering.
+* **[FNGarvin](https://github.com/FNGarvin):** **System Architect.** Modernized the engine using `uv`, implemented Linux/WSL support, optimized privacy (headless mode), and cleaned up the code architecture.
+* **[WildSpeaker7315](https://www.reddit.com/user/WildSpeaker7315/):** **Blackwell Research.** Provided the critical breakdown of PyTorch/CUDA compatibility for RTX 5090 support.
+
+---
+
+### ⚡ Key Features (v3.5 Ultimate)
+
+#### 1. 🚀 Next-Gen Engine (Powered by `uv`)
+* **Instant Setup:** Uses **`uv`** package manager. Installation takes seconds, not hours.
+* **Disk Saver:** Uses hardlinks to minimize disk usage (no more 10GB duplicated venvs).
+* **Cross-Platform:** Native support for **Windows**, **Linux**, and **WSL**.
+* **RTX 5090 Ready:** Native support for CUDA 12.8 / PyTorch 2.10.
+
+#### 2. 🎥 Intelligent Auto-Clipper (Strict Mode)
+* **Zero-Hallucination Cutting:** The tool uses a "Strict Filter" logic. It searches for sentences that **exactly** match your duration criteria (e.g., 5s with +/- 0.5s tolerance).
+* **Dynamic Folders:** Automatically creates folders like `dataset_5.0s`, `dataset_10.0s` to prevent overwriting.
+
+#### 3. 🖼️ Vision Captioning (Qwen2-VL)
+* **Two Modes:** Switch between **7B (High Quality)** and **2B (Speed)** instantly.
+* **Custom Prompts:** You can edit the Vision AI instructions in the sidebar (Perfect for **LTX-Video** camera movement descriptions).
+* **Safety Net:** Automatically forces your Trigger Word into the caption if the AI forgets it.
 
 ---
 
 ## 🚀 Installation
 
-### Windows
-1. Double-click **`install.bat`**.
-2. Once finished, use **`Run.bat`** to start the app.
+### 🪟 Windows
+1.  Double-click **`install.bat`**.
+    * *(Note: The installer will automatically download Python and dependencies via `uv`. No manual setup required.)*
+2.  Once finished, double-click **`Run.bat`** to start the app.
 
-### Linux / WSL
-1. Open a terminal in the project folder.
-2. Run: `chmod +x install.sh run.sh`
-3. Run: `./install.sh`
-4. Once finished, start the app with: `./run.sh`
-
----
-
-## ▶️ How to Run
-1. **Launch the App:**
-   **Linux / WSL:**
-   ```bash
-   ./run.sh
-   # Optional: ./run.sh -p 9000 -h 0.0.0.0
-   ```
-   **Windows:**
-   Double-click `Run.bat` or run via terminal:
-   ```cmd
-   Run.bat
-   :: Optional: Run.bat -p 9000 -h 0.0.0.0
-   ```
-2. A web interface will open in your browser.
-3. **Select Your Model:** Select **7B (Quality)** or **2B (Speed)** in the sidebar.
-4. **Upload a Video** (MP4/MKV).
-5. **Configure Settings:**
-    * **Target Duration:** Desired length of clips (e.g., 5-10 seconds).
-    * **Trigger Word:** (Optional) Enter your training token here (e.g., `prstxxx`).
-6. Click **`START PROCESS 🚀`**.
-
-> [!NOTE]
-> On the first run, the necessary models (Whisper, Qwen) will be downloaded. This may take some time depending on your connection.
+### 🐧 Linux / WSL
+1.  Open a terminal in the project folder.
+2.  Make scripts executable:
+    ```bash
+    chmod +x install.sh run.sh
+    ```
+3.  Run the installer:
+    ```bash
+    ./install.sh
+    ```
+4.  Start the app:
+    ```bash
+    ./run.sh
+    ```
 
 ---
 
-## 📂 Output
-* Generated clips and captions are saved in the **`dataset`** folder.
-* Files are named sequentially (e.g., `001.mp4`, `001.txt`).
+## ⚙️ How to Use
+1.  **Select Mode:** Choose between *Video Auto-Clipper* or *Image Folder Captioner*.
+2.  **Choose Model:** Select **7B** (Quality) or **2B** (Speed) in the sidebar.
+3.  **Custom Prompt (Optional):** In the sidebar, you can define how the AI should describe the scene (e.g., *"Focus on lighting and camera angle"*).
+4.  **Upload Video / Select Folder.**
+5.  **Click START.**
 
 ---
 
 <div align="center">
-  <b>Project maintained by Cyberbol</b>
+  <b>Open Source Community Project</b>
 </div>

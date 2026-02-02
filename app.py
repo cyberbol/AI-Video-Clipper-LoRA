@@ -1,46 +1,69 @@
+# --------------------------------------------------------------------------------
+# AI Video Clipper & LoRA Captioner (v3.5 Ultimate)
+#
+# 🏆 CREDITS & CONTRIBUTORS:
+# - Cyberbol:        Original Creator, Logic Design, Strict Mode, Custom Prompts
+# - FNGarvin:        System Architect, UV Engine, Linux/WSL Support
+# - WildSpeaker7315: Blackwell (RTX 5090) Compatibility Research
+# --------------------------------------------------------------------------------
+
 import os
 import sys
-
-# --- EMERGENCY BOOTSTRAP: CACHE & PATCHES ---
-# This MUST happen before any AI libraries are loaded.
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODELS_DIR = os.path.join(BASE_DIR, "models")
-os.makedirs(MODELS_DIR, exist_ok=True)
-
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-os.environ["OTEL_SDK_DISABLED"] = "true"
-
-try:
-    import patches
-    patches.apply_patches()
-except (ImportError, AttributeError):
-    pass
-# ---------------------------------------------
-
 import streamlit as st
 import whisperx
 from moviepy import VideoFileClip
 import tempfile
 import torch
 import gc
+import time
 from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
 from qwen_vl_utils import process_vision_info
-import time
+import tkinter as tk
+from tkinter import filedialog
 
-# --- WINDOWS FIX (STILL HERE FOR CONTEXT) ---
-# Zapobiega błędom biblioteki OMP na Windowsie
-# (Already set above, but kept in place to preserve original file structure)
+# --- 1. BOOTSTRAP & PATCHES ---
+try:
+    import patches
+    patches.apply_patches()
+except ImportError:
+    # Fallback (Legacy Fixes)
+    os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+    import torch.serialization
+    try:
+        from omegaconf.listconfig import ListConfig
+        from omegaconf.dictconfig import DictConfig
+        from omegaconf.base import ContainerMetadata, Node
+        import typing
+        torch.serialization.add_safe_globals([ListConfig, DictConfig, ContainerMetadata, Node, typing.Any])
+    except: pass
+    if not hasattr(torch, "_patched_for_5090"):
+        _orig_load = torch.load
+        def _safe_load(*args, **kwargs):
+            kwargs['weights_only'] = False
+            return _orig_load(*args, **kwargs)
+        torch.load = _safe_load
+        torch._patched_for_5090 = True
 
-# --- App Configuration ---
-st.set_page_config(page_title="Universal LoRA Dataset Creator", layout="wide")
+# --- 2. KONFIGURACJA ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODELS_DIR = os.path.join(BASE_DIR, "models")
+OUTPUT_DIR = os.path.join(BASE_DIR, "dataset") 
+os.makedirs(MODELS_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.environ["HF_HOME"] = MODELS_DIR
+
+# --- 3. UI CONFIG ---
+st.set_page_config(page_title="AI Clipper v3.5 (Hybrid Ultimate)", layout="wide")
 st.title("👁️🐧 AI Video Clipper & LoRA Captioner")
 
-# --- Hardware Check ---
+# --- TUTAJ ZMIANA: WIDOCZNE CREDITS DLA UŻYTKOWNIKA ---
+st.markdown("v3.5 | Created by: **Cyberbol** | Engine: **FNGarvin** (UV) | 5090 Fix: **WildSpeaker**")
+# ------------------------------------------------------
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
-# --- SIDEBAR CONFIGURATION ---
-st.sidebar.header("⚙️ AI Engine Settings")
-
+# --- SIDEBAR: GPU INFO ---
+st.sidebar.header("⚙️ Engine Status")
 if device == "cuda":
     gpu_name = torch.cuda.get_device_name(0)
     st.sidebar.success(f"GPU: **{gpu_name}**")
@@ -49,268 +72,186 @@ else:
 
 st.sidebar.divider()
 
-# --- MODEL SELECTION ---
-st.sidebar.subheader("🧠 Vision Model Selector")
-model_choice = st.sidebar.radio(
-    "Choose Model Version:",
-    ["Qwen2-VL-7B (Best Quality)", "Qwen2-VL-2B (Fastest)"],
-    index=0,
-    help="7B is smarter but slower (15GB). 2B is very fast but less detailed (5GB)."
-)
-
-if "2B" in model_choice:
-    SELECTED_MODEL_ID = "Qwen/Qwen2-VL-2B-Instruct"
-    st.sidebar.info("🚀 **Mode: Speed**\nGood for simple actions/clothing.")
-else:
-    SELECTED_MODEL_ID = "Qwen/Qwen2-VL-7B-Instruct"
-    st.sidebar.info("💎 **Mode: Quality**\nBest for details and complex scenes.")
+app_mode = st.sidebar.selectbox("Choose Mode:", ["🎥 Video Auto-Clipper", "🖼️ Image Folder Captioner"])
 
 st.sidebar.divider()
-st.sidebar.markdown(f"📂 **Models Storage:**\n`{MODELS_DIR}`")
+# --- WYBÓR MODELU ---
+model_choice = st.sidebar.radio("Vision Model:", ["Qwen2-VL-7B (High Quality)", "Qwen2-VL-2B (Fast)"], index=0)
+SELECTED_MODEL_ID = "Qwen/Qwen2-VL-7B-Instruct" if "7B" in model_choice else "Qwen/Qwen2-VL-2B-Instruct"
 
-# --- Memory Management ---
+# --- SIDEBAR: CUSTOM PROMPTS ---
+st.sidebar.divider()
+st.sidebar.markdown("### 📝 Vision Instructions")
+default_prompt = "Describe this {type} in detail for a dataset. Main subject: {trigger}. Describe the action, camera movement, lighting, atmosphere, and background."
+user_instruction = st.sidebar.text_area("System Prompt:", value=default_prompt, height=150, help="Use {trigger} to insert your keyword. Use {type} for image/video.")
+st.sidebar.info(f"💡 **Tip:** Use `{{trigger}}` tag to automatically insert your word.")
+
+# --- 4. FUNKCJE POMOCNICZE ---
 def clear_vram():
-    """Force clean GPU memory"""
     gc.collect()
     torch.cuda.empty_cache()
 
-# --- Processing Functions ---
-
-def run_whisper_processing(video_path, target_len, tol_min, tol_max):
-    """Phase 1: Audio Only."""
-    st.info("1/4 ⏳ Loading Whisper Large-v3...")
-    
-    compute_type = "float16"
-    # WhisperX ładujemy z download_root ustawionym na nasz folder models
-    model = whisperx.load_model("large-v3", device, compute_type=compute_type, download_root=MODELS_DIR)
-    
-    st.info("1/4 ⏳ Audio analysis...")
-    audio = whisperx.load_audio(video_path)
-    # Batch size 8 is safe for Windows
-    result = model.transcribe(audio, batch_size=8)
-    
-    # CLEANUP WHISPER - zwalniamy VRAM po analizie audio
-    del model
-    clear_vram()
-    st.toast("Whisper unloaded from VRAM.")
-    
-    st.info(f"2/4 ⏳ Aligning timestamps...")
-    model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=device)
-    result = whisperx.align(result["segments"], model_a, metadata, audio, device, return_char_alignments=False)
-    
-    del model_a
-    clear_vram()
-    
-    found_clips = []
-    min_dur = float(target_len) - float(tol_min)
-    max_dur = float(target_len) + float(tol_max)
-    if min_dur < 0: min_dur = 0.1
-    
-    for seg in result["segments"]:
-        start = seg['start']
-        end = seg['end']
-        duration = end - start
-        if min_dur <= duration <= max_dur:
-            found_clips.append((start, end, seg['text']))
-            
-    return found_clips
-
-def load_vision_model_now(model_id):
-    """Phase 2: Load Vision Model (Dynamic Selection)."""
-    st.info(f"3/4 ⏳ Loading Vision Model: {model_id}...")
-    
-    # Qwen użyje HF_HOME zdefiniowanego na górze skryptu
+def load_vision_models():
+    st.info(f"⏳ Loading Vision Engine ({SELECTED_MODEL_ID})...")
     model = Qwen2VLForConditionalGeneration.from_pretrained(
-        model_id, 
+        SELECTED_MODEL_ID, 
         torch_dtype=torch.bfloat16, 
         device_map="auto",
-        attn_implementation="sdpa"
+        attn_implementation="sdpa",
+        low_cpu_mem_usage=True 
     )
-    processor = AutoProcessor.from_pretrained(model_id)
+    processor = AutoProcessor.from_pretrained(SELECTED_MODEL_ID)
     return model, processor
 
-def generate_vision_caption(video_path, model, processor, trigger_word):
-    # Budowanie instrukcji (Prompt)
-    if trigger_word and trigger_word.strip():
-        system_instruction = (
-            f"TASK: Describe this video for a LoRA training dataset.\n"
-            f"IMPORTANT: The main subject is UNIQUELY IDENTIFIED as '{trigger_word}'.\n"
-            f"RULES:\n"
-            f"1. You MUST refer to the subject as '{trigger_word}' immediately.\n"
-            f"2. Do NOT use generic terms like 'woman', 'man', 'girl', 'boy', 'person' for the main subject.\n"
-            f"3. Example start: 'A medium shot of {trigger_word} wearing...'\n"
-            f"4. Describe clothing, background, and actions in detail.\n"
-            f"5. Do not describe the audio."
-        )
-    else:
-        system_instruction = (
-            "TASK: Describe this video for a LoRA training dataset.\n"
-            "RULES:\n"
-            "1. Start with the camera angle (e.g., 'A close-up of...').\n"
-            "2. Describe the subject naturally (e.g., 'a young woman', 'a man').\n"
-            "3. Describe clothing, background, and actions in detail.\n"
-            "4. Do not describe the audio."
-        )
+def select_folder_dialog():
+    root = tk.Tk()
+    root.withdraw()
+    root.wm_attributes('-topmost', 1)
+    folder_path = filedialog.askdirectory(master=root)
+    root.destroy()
+    return folder_path
 
-    messages = [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "video",
-                    "video": video_path,
-                    "max_pixels": 360 * 420, 
-                    "fps": 1.0, 
-                },
-                {"type": "text", "text": system_instruction},
-            ],
-        }
-    ]
-    
+# --- 5. LOGIKA WIDEO (STRICT MODE) ---
+def run_whisper_phase(video_path, target_dur, tol_min, tol_max):
+    st.info("⏳ 1/3 Audio Analysis (Strict Filtering)...")
+    model = whisperx.load_model("large-v3", device, compute_type="float16", download_root=MODELS_DIR)
+    audio = whisperx.load_audio(video_path)
+    result = model.transcribe(audio, batch_size=16)
+    model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=device)
+    result = whisperx.align(result["segments"], model_a, metadata, audio, device)
+    del model, model_a
+    clear_vram()
+    final_clips = []
+    min_accept = target_dur - tol_min
+    max_accept = target_dur + tol_max
+    if min_accept < 0.1: min_accept = 0.1
+    for s in result["segments"]:
+        duration = s['end'] - s['start']
+        if min_accept <= duration <= max_accept:
+            final_clips.append(s)
+    return final_clips
+
+# --- 6. LOGIKA OBRAZU ---
+def caption_content(content_path, content_type, model, processor, trigger, custom_prompt, model_id):
+    if not custom_prompt.strip():
+        custom_prompt = "Describe this content in high detail."
+    if "2B" in model_id:
+        custom_prompt += " Output as a single, continuous paragraph. Do not use markdown headers, bold text, or bullet points."
+    final_prompt = custom_prompt.replace("{trigger}", trigger if trigger else "")
+    final_prompt = final_prompt.replace("{type}", "video" if content_type == "video" else "image")
+    messages = [{"role": "user", "content": [
+        {"type": "video" if content_type == "video" else "image", 
+         "video" if content_type == "video" else "image": content_path, 
+         "max_pixels": 360*420, "fps": 1.0}, 
+        {"type": "text", "text": final_prompt}
+    ]}]
     text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     image_inputs, video_inputs = process_vision_info(messages)
-    
-    inputs = processor(
-        text=[text],
-        images=image_inputs,
-        videos=video_inputs,
-        padding=True,
-        return_tensors="pt",
-    )
-    inputs = inputs.to(model.device)
-    
-    generated_ids = model.generate(**inputs, max_new_tokens=384)
-    generated_ids_trimmed = [
-        out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-    ]
-    output_text = processor.batch_decode(
-        generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
-    )
-    
-    final_text = output_text[0]
+    inputs = processor(text=[text], images=image_inputs, videos=video_inputs, padding=True, return_tensors="pt").to(device)
+    generated_ids = model.generate(**inputs, max_new_tokens=256)
+    output_text = processor.batch_decode(generated_ids[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)[0]
+    output_text = output_text.replace("**", "").replace("##", "")
+    if trigger and trigger not in output_text:
+        output_text = f"{trigger}, {output_text}"
+    return output_text
 
-    # --- SAFETY NET (BEZPIECZNIK DLA MODELU 2B) ---
-    # Modele 2B czasem ignorują instrukcje. Tutaj sprawdzamy:
-    # Czy użytkownik podał trigger word? Oraz czy NIE ma go w tekście wynikowym?
-    # Jeśli tak - dopisujemy go siłą na początku.
-    if trigger_word and trigger_word.strip():
-        if trigger_word not in final_text:
-            final_text = f"{trigger_word}, {final_text}"
-            
-    return final_text
+# --- 7. UI GŁÓWNE ---
+lora_trigger = st.text_input("LoRA Trigger Word (Optional)", value="cbrl man")
 
-# --- UI ---
-uploaded_file = st.file_uploader("Upload Video File (MP4, MKV)", type=["mp4", "mkv", "mov"])
-st.divider()
+if app_mode == "🎥 Video Auto-Clipper":
+    uploaded_file = st.file_uploader("Upload Video (MP4, MKV)", type=["mp4", "mkv"])
+    st.subheader("✂️ Cutting Parameters")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1: target_dur = st.number_input("Target Length (s)", 1.0, 60.0, 5.0)
+    with col2: out_width = st.number_input("Output Width (px)", 256, 3840, 1024)
+    with col3: out_height = st.number_input("Output Height (px)", 256, 3840, 1024)
+    with col4: out_fps = st.number_input("Output FPS", 1, 120, 24)
+    t_col1, t_col2 = st.columns(2)
+    with t_col1: tol_minus = st.number_input("Tolerance Margin - (sec)", 0.0, 5.0, 0.5)
+    with t_col2: tol_plus = st.number_input("Tolerance Margin + (sec)", 0.0, 10.0, 1.0)
+    final_min = target_dur - tol_minus
+    final_max = target_dur + tol_plus
+    st.info(f"ℹ️ STRICT MODE: Only saving clips strictly between **{final_min:.1f}s** and **{final_max:.1f}s**.")
 
-st.subheader("Dataset Settings")
-lora_trigger = st.text_input("Trigger Word (Optional)", placeholder="e.g., prstxxx")
-st.divider()
-
-col1, col2, col3, col4 = st.columns(4)
-with col1: target_sec = st.number_input("Target Duration (s)", 2.0, 60.0, 5.0, 0.5)
-with col2: out_width = st.number_input("Width (px)", 100, 3840, 1024)
-with col3: out_height = st.number_input("Height (px)", 100, 2160, 1024)
-with col4: out_fps = st.number_input("FPS", 10, 60, 24)
-
-t_col1, t_col2 = st.columns(2)
-with t_col1: tol_minus = st.number_input("Tolerance Minus (-)", 0.0, 5.0, 0.5, 0.1)
-with t_col2: tol_plus = st.number_input("Tolerance Plus (+)", 0.0, 10.0, 1.0, 0.1)
-
-final_min = target_sec - tol_minus
-final_max = target_sec + tol_plus
-st.info(f"ℹ️ Searching clips between **{final_min:.2f}s** and **{final_max:.2f}s**")
-
-if uploaded_file and st.button("START PROCESS 🚀"):
-    # Fix for file handle on Windows (zapisujemy uploadowany plik tymczasowo)
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp:
-        tmp.write(uploaded_file.read())
-        video_path = tmp.name
-    
-    try:
-        # Phase 1: Audio Processing (Whisper)
-        clips = run_whisper_processing(video_path, target_sec, tol_minus, tol_plus)
-        
-        if not clips:
-            st.warning("No clips found within the specified duration criteria.")
-        else:
-            trigger_info = f"Trigger: '{lora_trigger}'" if lora_trigger else "Trigger: NONE"
-            st.success(f"Found {len(clips)} clips! {trigger_info}. Processing vision using: {model_choice}...")
-            
-            # Phase 2: Vision Processing (Qwen)
-            vision_model, vision_processor = load_vision_model_now(SELECTED_MODEL_ID)
-            
-            output_dir = "dataset"
-            os.makedirs(output_dir, exist_ok=True)
-            
-            video = VideoFileClip(video_path)
-            progress_bar = st.progress(0)
-            
-            limit_clips = 100 # Limit dla bezpieczeństwa, można zwiększyć
-            for i, (start, end, audio_text) in enumerate(clips[:limit_clips]):
-                base_filename = f"{i+1:03d}"
-                clip_filename = f"{base_filename}.mp4"
-                out_vid_path = os.path.join(output_dir, clip_filename)
-                
-                # Cięcie wideo (MoviePy)
-                new_clip = video.subclipped(start, end)
-                new_clip = new_clip.resized(new_size=(out_width, out_height))
-                new_clip.write_videofile(out_vid_path, codec="libx264", audio_codec="aac", fps=out_fps, preset="medium", logger=None)
-                
-                # Generowanie opisu (Vision)
-                visual_description = generate_vision_caption(out_vid_path, vision_model, vision_processor, lora_trigger)
-                final_caption = f"{visual_description} The person says: \"{audio_text.strip()}\""
-                
-                # Zapis pliku tekstowego
-                txt_filename = f"{base_filename}.txt"
-                out_txt_path = os.path.join(output_dir, txt_filename)
-                with open(out_txt_path, "w", encoding="utf-8") as f:
-                    f.write(final_caption)
-                
-                # Wyświetlanie w interfejsie
-                with st.expander(f"Clip {base_filename}", expanded=True):
-                    col_vid, col_txt = st.columns([1, 1])
-                    with col_vid:
-                        # Używamy ścieżki absolutnej dla Streamlit Video playera
-                        abs_vid_path = os.path.abspath(out_vid_path)
-                        st.video(abs_vid_path)
-                    with col_txt:
-                        st.text_area("Caption", final_caption, height=200)
-                
-                progress_bar.progress((i + 1) / min(len(clips), limit_clips))
-            
-            video.close()
-            # Sprzątanie po modelu Vision
-            del vision_model
-            del vision_processor
+    if uploaded_file and st.button("🚀 START PROCESSING"):
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp:
+            tmp.write(uploaded_file.read())
+            video_path = tmp.name
+        try:
+            segments = run_whisper_phase(video_path, target_dur, tol_minus, tol_plus)
+            if not segments:
+                st.error(f"No clips found between {final_min:.1f}s and {final_max:.1f}s! Try increasing the Tolerance Margins.")
+            else:
+                current_output_dir = os.path.join(BASE_DIR, f"dataset_{target_dur}s")
+                os.makedirs(current_output_dir, exist_ok=True)
+                v_model, v_processor = load_vision_models()
+                video_full = VideoFileClip(video_path)
+                prog = st.progress(0)
+                st.success(f"Found {len(segments)} PERFECT clips. Saving to: {current_output_dir}")
+                for i, seg in enumerate(segments[:100]):
+                    base_name = f"clip_{i+1:03d}"
+                    clip_out = os.path.join(current_output_dir, f"{base_name}.mp4")
+                    sub = video_full.subclipped(seg['start'], seg['end'])
+                    sub = sub.resized(new_size=(out_width, out_height))
+                    sub.write_videofile(clip_out, codec="libx264", audio_codec="aac", fps=out_fps, preset="medium", logger=None)
+                    visual_caption = caption_content(clip_out, "video", v_model, v_processor, lora_trigger, user_instruction, SELECTED_MODEL_ID)
+                    full_desc = f"{visual_caption} The person says: \"{seg['text'].strip()}\""
+                    with open(os.path.join(current_output_dir, f"{base_name}.txt"), "w", encoding="utf-8") as f:
+                        f.write(full_desc)
+                    with st.expander(f"✅ Clip {i+1} ({seg['end']-seg['start']:.1f}s)"):
+                        st.video(clip_out)
+                        st.write(f"**Speech:** {seg['text']}")
+                    prog.progress((i+1)/min(len(segments), 100))
+                video_full.close()
+                del v_model, v_processor
+                st.success(f"Done! Check folder: {current_output_dir}")
+        except Exception as e:
+            st.error(f"Critical Error: {e}")
+            import traceback
+            st.code(traceback.format_exc())
+        finally:
             clear_vram()
-            st.success(f"Done! Check folder: {output_dir}")
-            
-    except Exception as e:
-        st.error(f"Error: {e}")
-        import traceback
-        st.code(traceback.format_exc())
-        
-    finally:
-        # Usuwamy plik tymczasowy wideo
-        if os.path.exists(video_path):
-            try:
-                os.unlink(video_path)
-            except:
-                pass
+            if os.path.exists(video_path):
+                try: os.unlink(video_path)
+                except: pass
 
-# --- Cleanup Button (Sidebar) ---
-if st.sidebar.button("🧹 Clear output folder"):
-    output_dir = "dataset"
-    if os.path.exists(output_dir):
-        for file in os.listdir(output_dir):
-            file_path = os.path.join(output_dir, file)
-            try:
-                if os.path.isfile(file_path):
-                    os.unlink(file_path)
-            except Exception as e:
-                st.sidebar.error(f"Error: {e}")
-        st.sidebar.success("Folder cleaned!")
+else:
+    if 'img_folder_path' not in st.session_state:
+        st.session_state['img_folder_path'] = "C:/Dataset/Images"
+    st.markdown("### 📂 Select Image Folder")
+    col_path, col_btn = st.columns([3, 1])
+    with col_btn:
+        if st.button("📂 Browse Folder"):
+            selected_folder = select_folder_dialog()
+            if selected_folder:
+                st.session_state['img_folder_path'] = selected_folder
+                st.rerun()
+    with col_path:
+        img_folder = st.text_input("Selected Path:", value=st.session_state['img_folder_path'])
+    if st.button("🚀 CAPTION FOLDER"):
+        if os.path.exists(img_folder):
+            v_model, v_processor = load_vision_models()
+            valid_exts = (".png", ".jpg", ".jpeg", ".webp")
+            images = [f for f in os.listdir(img_folder) if f.lower().endswith(valid_exts)]
+            if not images:
+                st.warning("No images found in this folder!")
+            else:
+                prog = st.progress(0)
+                st.info(f"Found {len(images)} images. Processing with custom instructions...")
+                for i, img_name in enumerate(images):
+                    full_path = os.path.join(img_folder, img_name)
+                    caption = caption_content(full_path, "image", v_model, v_processor, lora_trigger, user_instruction, SELECTED_MODEL_ID)
+                    txt_name = os.path.splitext(img_name)[0] + ".txt"
+                    with open(os.path.join(img_folder, txt_name), "w", encoding="utf-8") as f:
+                        f.write(caption)
+                    st.write(f"✅ Captioned: {img_name}")
+                    prog.progress((i+1)/len(images))
+                del v_model, v_processor
+                clear_vram()
+                st.success("Folder Captioning Complete!")
+        else:
+            st.error("Folder path not found!")
 
+# --- STOPKA NA DOLE (CREDITS) ---
 st.markdown("---")
-st.markdown("<center>Created by: Cyberbol</center>", unsafe_allow_html=True)
+st.markdown("<center><b>Project maintained by Cyberbol</b> | Community Contributions by FNGarvin & WildSpeaker</center>", unsafe_allow_html=True)
