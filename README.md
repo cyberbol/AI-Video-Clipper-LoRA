@@ -48,8 +48,17 @@ If you want to receive new features automatically:
 2. Run `Run.bat`.
 
 ### 🐧 Linux / WSL
-1. `chmod +x install.sh run.sh`
-2. `./install.sh` && `./run.sh`
+1. Open a terminal in the project folder.
+2. Run the installer:
+    ```bash
+    ./install.sh
+    ```
+3. Start the app:
+    ```bash
+    ./run.sh
+    ```
+
+*Note: The execute bit is already set. Ensure you have **ffmpeg** installed via your distribution's package manager.*
 
 ---
 <div align="center">
