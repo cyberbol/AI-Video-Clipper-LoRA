@@ -1,6 +1,24 @@
+import os
+import sys
+
+# --- EMERGENCY BOOTSTRAP: CACHE & PATCHES ---
+# This MUST happen before any AI libraries are loaded.
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODELS_DIR = os.path.join(BASE_DIR, "models")
+os.makedirs(MODELS_DIR, exist_ok=True)
+
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+os.environ["OTEL_SDK_DISABLED"] = "true"
+
+try:
+    import patches
+    patches.apply_patches()
+except (ImportError, AttributeError):
+    pass
+# ---------------------------------------------
+
 import streamlit as st
 import whisperx
-import os
 from moviepy import VideoFileClip
 import tempfile
 import torch
@@ -9,18 +27,9 @@ from transformers import Qwen2VLForConditionalGeneration, AutoProcessor
 from qwen_vl_utils import process_vision_info
 import time
 
-# --- WINDOWS FIX ---
+# --- WINDOWS FIX (STILL HERE FOR CONTEXT) ---
 # Zapobiega błędom biblioteki OMP na Windowsie
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-
-# --- LOCAL MODELS PATH CONFIGURATION ---
-# Ustalamy ścieżkę do folderu "models" w katalogu, gdzie leży ten skrypt
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODELS_DIR = os.path.join(BASE_DIR, "models")
-os.makedirs(MODELS_DIR, exist_ok=True)
-
-# Wymuszamy na HuggingFace (Qwen) użycie tego folderu
-os.environ["HF_HOME"] = MODELS_DIR
+# (Already set above, but kept in place to preserve original file structure)
 
 # --- App Configuration ---
 st.set_page_config(page_title="Universal LoRA Dataset Creator", layout="wide")
