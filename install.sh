@@ -31,7 +31,7 @@ fi
 
 echo "[STEP 1/3] Preparing Environment..."
 if [ ! -d ".venv" ]; then
-    uv venv .venv --python 3.10 --link-mode hardlink
+    uv venv .venv --python 3.10 --seed --managed-python --link-mode hardlink
 fi
 source .venv/bin/activate
 
@@ -44,6 +44,7 @@ if [ ! -f ".streamlit/config.toml" ]; then
 gatherUsageStats = false
 [server]
 headless = true
+maxUploadSize = 4096
 EOL
 fi
 
@@ -59,18 +60,31 @@ uv pip install \
     "git+https://github.com/m-bain/whisperX.git" --no-deps
 
 echo "[INFO] Syncing GGUF High-Performance Backend (CUDA 12.8)..."
-if ls wheels/llama_cpp_python*.whl 1> /dev/null 2>&1; then
+if ls wheels/llama_cpp_python*linux_x86_64.whl 1> /dev/null 2>&1; then
     echo "[INFO] Installing verified local CUDA 12.8 wheel..."
-    uv pip install wheels/llama_cpp_python*.whl
+    uv pip install wheels/llama_cpp_python*linux_x86_64.whl --force-reinstall
 else
-    echo "[WARNING] Local wheel not found. Attempting to install from PyPI (may require compilation)..."
-    uv pip install llama-cpp-python
+    echo ""
+    echo "[ERROR] Pre-built Linux Wheel for llama-cpp-python NOT FOUND!"
+    echo "[ERROR] We require a specific CUDA 12.8 wheel for Python 3.10 to avoid"
+    echo "[ERROR] compiling from source (which creates mismatches)."
+    echo ""
+    echo "[ACTION REQUIRED]"
+    echo "1. Build the wheel: Run 'pip wheel llama-cpp-python --no-deps --wheel-dir=wheels' in the .venv"
+    echo "2. Ensure CMAKE_ARGS='-DGGML_CUDA=on' is set if building manually."
+    echo "3. Run ./install.sh again."
+    echo ""
+    exit 1
 fi
 
 echo "[INFO] Syncing remaining dependencies from pyproject.toml..."
 uv pip install \
     --link-mode hardlink \
     -r pyproject.toml --extra-index-url https://download.pytorch.org/whl/cu128
+
+echo ""
+echo "[CHECK] Verifying GPU Acceleration..."
+.venv/bin/python -c "from llama_cpp import llama_supports_gpu_offload; print(f'>>> GPU Offload Supported: {llama_supports_gpu_offload()}')"
 
 echo "======================================================================"
 echo "Installation complete!"

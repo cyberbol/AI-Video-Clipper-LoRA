@@ -13,10 +13,8 @@ __pycache__/
 # They waste bandwidth and storage if committed to git.
 models/
 
-# Dataset Output
-# Reason: This is where your generated video clips and captions are saved. 
-# Your data should not be committed to the codebase.
-dataset/
+# Dataset Output (Wildcard to catch all variations)
+dataset*/
 
 # Temporary Files
 tmp/
@@ -30,10 +28,8 @@ tmp/
 !demo.webp
 
 # Streamlit Configuration & Secrets
-# Reason: This folder contains local configuration settings (like disabling telemetry) 
-# and potentially secrets/API keys. It should never be public.
 .streamlit/
 
-# Documentation Artifacts
-# Reason: This file is a PR description and should not be committed to the repository.
-walkthrough.md
+
+# Personal Project Notes
+notes/
