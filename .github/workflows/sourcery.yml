@@ -6,7 +6,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: write # REQUIRED for the bot to "chime in" with comments
+      pull-requests: write
 
     steps:
       - name: Checkout
@@ -18,8 +18,5 @@ jobs:
         uses: sourcery-ai/action@v1
         with:
           token: ${{ secrets.SOURCERY_TOKEN }}
-          # This forces the bot to post the summary and diagrams to the PR
-          skip-comment: false
-          show-unchanged: false
-        continue-on-error: true
+          check: false
 #eof
