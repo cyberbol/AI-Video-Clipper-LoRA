@@ -1,6 +1,5 @@
-
 @echo off
-:: AI Video Clipper ^& LoRA Captioner - Windows Installer
+:: AI Video Clipper & LoRA Captioner - Windows Installer (v4.0 Ready)
 
 TITLE AI Clipper Installer - UV Edition
 color 0B
@@ -22,22 +21,15 @@ if %errorlevel% neq 0 (
     winget install astral-sh.uv --accept-source-agreements --accept-package-agreements
     
     :: SEARCH STRATEGY:
-    :: 1. Standard Winget Links (Symlinks)
     if exist "%LOCALAPPDATA%\Microsoft\WinGet\Links\uv.exe" (
         set "PATH=%LOCALAPPDATA%\Microsoft\WinGet\Links;%PATH%"
     )
-    
-    :: 2. Dynamic Winget Package Folder (finding the folder ending in ...uv_... source)
     for /d %%D in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.uv*") do (
         if exist "%%D\uv.exe" set "PATH=%%D;%PATH%"
     )
-    
-    :: 3. Cargo Bin (fallback)
     if exist "%USERPROFILE%\.cargo\bin\uv.exe" (
         set "PATH=%USERPROFILE%\.cargo\bin;%PATH%"
     )
-    
-    :: 4. User-specific valid path from previous runs?
     if exist "%LOCALAPPDATA%\uv\uv.exe" (
          set "PATH=%LOCALAPPDATA%\uv;%PATH%"
     )
@@ -56,6 +48,7 @@ if %errorlevel% neq 0 (
 
 echo.
 echo [STEP 1/3] Preparing isolated environment (uv)...
+if not exist ".venv" (
     uv venv .venv --python 3.10 --link-mode hardlink
 )
 
@@ -68,15 +61,11 @@ if %errorlevel% neq 0 (
     echo [INFO] FFmpeg not found. Installing via winget...
     winget install Gyan.FFmpeg --accept-source-agreements --accept-package-agreements
     
-    :: ATTEMPT DYNAMIC PATH REFRESH
-    :: 1. Standard Winget Links (Symlinks)
     if exist "%LOCALAPPDATA%\Microsoft\WinGet\Links\ffmpeg.exe" (
         set "PATH=%LOCALAPPDATA%\Microsoft\WinGet\Links;%PATH%"
         echo [INFO] Added Winget Links to PATH for this session.
     )
 
-    :: 2. Robust Search for Gyan.FFmpeg Package (Deep Search)
-    :: User Path: %LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg_...\ffmpeg-*-full_build\bin
     for /d %%P in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg_*") do (
         echo [INFO] Found Legacy Package: %%~nxP
         for /d %%B in ("%%P\ffmpeg-*-full_build") do (
@@ -87,7 +76,6 @@ if %errorlevel% neq 0 (
         )
     )
     
-    :: Verify
     where ffmpeg >nul 2>&1
     if %errorlevel% neq 0 (
         echo [WARNING] FFmpeg installed but not detected in current session.
@@ -122,8 +110,16 @@ echo.
 echo [STEP 3/3] Installing AI Stack...
 uv pip install "git+https://github.com/m-bain/whisperX.git" --no-deps --link-mode hardlink
 
-echo [INFO] Syncing remaining dependencies from pyproject.toml...
+echo [INFO] Syncing basic dependencies from pyproject.toml...
 uv pip install -r pyproject.toml --extra-index-url https://download.pytorch.org/whl/cu128 --link-mode hardlink
+
+:: --- NOWA SEKCJA v4.0 ---
+echo.
+echo [STEP 3.5] Installing Audio Intelligence Stack (Qwen2-Audio Support)...
+echo [INFO] Adding librosa, soundfile and updating transformers...
+uv pip install librosa soundfile numpy --link-mode hardlink
+uv pip install --upgrade transformers accelerate huggingface_hub --link-mode hardlink
+:: ------------------------
 
 echo.
 echo ======================================================================
@@ -132,5 +128,3 @@ echo ======================================================================
 echo You can now run the program using "Run.bat".
 echo.
 pause
-
-::EOF install.bat
