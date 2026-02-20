@@ -33,3 +33,6 @@ tmp/
 
 # PR Artifacts
 walkthrough.md
+
+# Local Orchestration
+scripts/

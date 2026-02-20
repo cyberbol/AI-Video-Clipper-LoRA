@@ -24,3 +24,4 @@ tmp
 notes/
 # Infrastructure
 .env
+scripts/

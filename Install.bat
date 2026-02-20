@@ -141,9 +141,26 @@ uv pip install ^
     "torch==2.10.0+cu128" "torchvision==0.25.0+cu128" "torchaudio==2.10.0+cu128"
 
 echo [INFO] Syncing GGUF High-Performance Backend (CUDA 12.8)...
-set "WIN_WHEEL_URL=https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.23+cu128-cp310-cp310-win_amd64.whl"
-set "WIN_WHEEL_SHA256=f25023777b5806925399b2e3c76c8bfae485e3cb0ab8b7d99c6a48e42894c37a"
-set "WHEEL_FILE=llama_cpp_python-0.3.23+cu128-cp310-cp310-win_amd64.whl"
+:: GPU Architecture Detection
+set "IS_MODERN_GPU=false"
+for /f "tokens=1 delims=." %%a in ('nvidia-smi --query-gpu=compute_cap --format=noheader^,csv 2^>nul') do (
+    set /a "MAJOR_CAP=%%a"
+    echo [INFO] Detected NVIDIA GPU Compute Capability Major: !MAJOR_CAP!
+    if !MAJOR_CAP! GEQ 9 (
+        echo [INFO] Modern GPU detected (Hopper/Blackwell). Selecting optimized Blackwell wheel.
+        set "IS_MODERN_GPU=true"
+    )
+)
+
+if "!IS_MODERN_GPU!"=="true" (
+    set "WIN_WHEEL_URL=https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128_noavx512_Blackwell-cp310-cp310-win_amd64.whl"
+    set "WIN_WHEEL_SHA256=6c13577479d21d51832b2b0f5a75dc64a76ed40ed3f97c9e46bdcf666e286b69"
+    set "WHEEL_FILE=llama_cpp_python-0.3.26+cu128_noavx512_Blackwell-cp310-cp310-win_amd64.whl"
+) else (
+    set "WIN_WHEEL_URL=https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128_noavx512-cp310-cp310-win_amd64.whl"
+    set "WIN_WHEEL_SHA256=f039c0b7f41236b95c4df83edad18976437a0f437201e1fb41e5743c450c8213"
+    set "WHEEL_FILE=llama_cpp_python-0.3.26+cu128_noavx512-cp310-cp310-win_amd64.whl"
+)
 
 echo [INFO] Downloading wheel for verification...
 curl -L -o "%WHEEL_FILE%" "%WIN_WHEEL_URL%"

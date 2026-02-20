@@ -35,12 +35,26 @@ cd AI-Video-Clipper-LoRA
 # Ensure the cache is clear for this package
 uv cache clean llama-cpp-python
 
+# Install Build Requirements (Ninja avoids the slow, sequential MSBuild generator!)
+uv pip install ninja scikit-build-core cmake
+
 # Set Build Environment Variables
+# Tell CMake to use Ninja instead of the slow MSBuild
+$env:CMAKE_GENERATOR = "Ninja"
 $env:FORCE_CMAKE = "1"
+
 # IMPORTANT:Change this to your CUDA installation path
 $env:CUDA_PATH = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8" 
-# The number of parallel jobs - beware that RAM is your bottleneck here, not CPU cores
-$env:CMAKE_ARGS = "-DGGML_CUDA=on -DCMAKE_BUILD_TYPE=Release -D{CMAKE_BUILD_PARALLEL_LEVEL=4}"
+
+# Instruct the MSVC C/C++ compiler to use ALL available CPU cores
+$env:CFLAGS = "/MP"
+$env:CXXFLAGS = "/MP"
+
+# The number of parallel build jobs (Set to your CPU Thread Count)
+$env:CMAKE_BUILD_PARALLEL_LEVEL = "16"
+
+# Compiler Args - Disable AVX512 for broad compatibility unless you have a modern workstation CPU
+$env:CMAKE_ARGS = "-DGGML_CUDA=on -DCMAKE_BUILD_TYPE=Release -DLLAMA_AVX512=OFF"
 
 # Build the wheel from the JamePeng fork (or latest supported source)
 pip wheel git+https://github.com/JamePeng/llama-cpp-python.git@main --no-deps --wheel-dir=wheels --no-cache-dir
@@ -68,11 +82,12 @@ uv cache clean llama-cpp-python
 
 # Build using inline environment variables
 # IMPORTANT: Use -DLLAMA_AVX512=OFF to prevent "Illegal instruction" on non-AVX512 CPUs (like many Runpod nodes)
+# IMPORTANT: If targeting RTX 5090 or other Blackwell GPUs, you MUST include -DCMAKE_CUDA_ARCHITECTURES=90
 export PATH=/usr/local/cuda/bin:$PATH
-export CUDACXX=/usr/bin/nvcc
+export CUDACXX=/usr/local/cuda/bin/nvcc
 export FORCE_CMAKE=1
 export CUDA_PATH=/usr/local/cuda
-export CMAKE_ARGS="-DGGML_CUDA=ON -DLLAMA_AVX512=OFF -DLLAMA_AVX2=ON -DCMAKE_BUILD_TYPE=Release"
+export CMAKE_ARGS="-DGGML_CUDA=ON -DLLAMA_AVX512=OFF -DCMAKE_CUDA_ARCHITECTURES=all -DCMAKE_BUILD_TYPE=Release"
 export CMAKE_BUILD_PARALLEL_LEVEL=8 
 pip wheel git+https://github.com/JamePeng/llama-cpp-python.git --no-deps --wheel-dir=wheels --no-cache-dir
 
