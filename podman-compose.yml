@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  apt-cache-proxy:
+    image: sameersbn/apt-cacher-ng:latest
+    container_name: apt-cache-proxy
+    ports:
+      - "${APT_CACHE_PORT}:3142"
+    volumes:
+      - "${APT_CACHE_PATH}:/var/cache/apt-cacher-ng"
+    restart: always
+
+  ai-video-clipper:
+    build:
+      context: .
+      args:
+        # Use host.containers.internal to reach the shared pantry proxy
+        - APT_PROXY=http://host.containers.internal:${APT_CACHE_PORT}
+    container_name: ai-video-clipper
+    depends_on:
+      - apt-cache-proxy
+    ports:
+      - "${STREAMLIT_PORT}:8501"
+      - "${FILEBROWSER_PORT}:8080"
+      - "${SSH_PORT}:22"
+    volumes:
+      - .:/workspace
+      - "${UV_CACHE_PATH}:/root/.cache/uv"
+      - "${MODELS_PATH}:/workspace/models"
+    environment:
+      - UV_CACHE_DIR=/root/.cache/uv
+      - HF_HOME=/workspace/models
+      - TORCH_HOME=/workspace/models
+    # Podman 4+ CDI / NVIDIA support
+    devices:
+      - "nvidia.com/gpu=all"
+    # Docker 20.10+ GPU support (Fallback)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped

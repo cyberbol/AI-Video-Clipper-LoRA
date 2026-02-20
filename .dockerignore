@@ -1,0 +1,26 @@
+# Docker-specific Exclusions
+.git
+.github
+.cache
+*.log
+
+# Synced from .gitignore
+__pycache__/
+*.py[cod]
+.venv
+models
+models/
+wheels
+wheels/
+dataset*
+dataset*/
+dataset_*/
+tmp
+*.mp4
+*.mkv
+*.mov
+!demo.webp
+.streamlit/
+notes/
+# Infrastructure
+.env

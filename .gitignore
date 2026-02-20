@@ -1,0 +1,35 @@
+# Python Bytecode
+__pycache__/
+*.py[cod]
+
+# Virtual Environment
+.venv/
+
+# Large Model Files
+models/
+
+# Dataset Output
+dataset/
+dataset_*/
+
+# Temporary Files
+tmp/
+*.tmp.*
+
+# Media Files (Input/Output)
+*.mp4
+*.mkv
+*.mov
+
+# Streamlit Configuration & Secrets
+.streamlit/
+
+# Environment Secrets
+.env
+.env.*
+
+# Local DBs
+*.db
+
+# PR Artifacts
+walkthrough.md
