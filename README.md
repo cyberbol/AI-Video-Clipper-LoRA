@@ -1,4 +1,4 @@
-# 👁️🐧👂 AI Video Clipper & LoRA Captioner (v5.0)
+# 👁️🐧👂 AI Video Clipper & LoRA Captioner (v4.0)
 
 **State of the Art dataset preparation tool for Video LoRA training (LTX-2, HunyuanVideo).**
 *Now featuring Audio Intelligence, 3-Stage Pipeline, and Advanced Bulk Processing.*

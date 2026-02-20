@@ -74,8 +74,6 @@ gatherUsageStats = false
 [server]
 headless = true
 maxUploadSize = 4096
-enableCORS = false
-enableXsrfProtection = false
 EOL
 fi
 

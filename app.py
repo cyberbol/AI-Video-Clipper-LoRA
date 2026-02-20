@@ -34,7 +34,6 @@ import shutil
 
 # Suppress Streamlit's "missing ScriptRunContext" warning in threads
 logging.getLogger("streamlit.runtime.scriptrunner_utils.script_run_context").setLevel(logging.ERROR)
-logging.getLogger("streamlit.runtime.scriptrunner.script_run_context").setLevel(logging.ERROR)
 
 # 5090 Fix (In-line backup if patches failed or specifically for this file)
 if not hasattr(torch, "_patched_for_5090"):

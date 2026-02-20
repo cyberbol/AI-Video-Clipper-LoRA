@@ -129,8 +129,6 @@ if not exist ".streamlit\config.toml" (
         echo [server]
         echo headless = true
         echo maxUploadSize = 4096
-        echo enableCORS = false
-        echo enableXsrfProtection = false
     ) > .streamlit\config.toml
 )
 
