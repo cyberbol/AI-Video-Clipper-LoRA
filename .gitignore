@@ -1,39 +1,35 @@
 # Python Bytecode
-# Reason: These are machine-specific compiled files that should not be shared between developers.
 __pycache__/
 *.py[cod]
 
 # Virtual Environment
-# Reason: This folder contains the local Python installation and libraries managed by 'uv'. 
-# It is specific to your machine's OS and architecture.
 .venv/
 
 # Large Model Files
-# Reason: These are large AI model weights (GBs in size) downloaded at runtime. 
-# They waste bandwidth and storage if committed to git.
 models/
 
 # Dataset Output
-# Reason: This is where your generated video clips and captions are saved. 
-# Your data should not be committed to the codebase.
 dataset/
+dataset_*/
 
 # Temporary Files
 tmp/
+*.tmp.*
 
 # Media Files (Input/Output)
-# Reason: Avoid committing large video files.
 *.mp4
 *.mkv
 *.mov
-# Exception: Keep the demo image for the README
-!demo.webp
 
 # Streamlit Configuration & Secrets
-# Reason: This folder contains local configuration settings (like disabling telemetry) 
-# and potentially secrets/API keys. It should never be public.
 .streamlit/
 
-# Documentation Artifacts
-# Reason: This file is a PR description and should not be committed to the repository.
+# Environment Secrets
+.env
+.env.*
+
+# Local DBs
+*.db
+
+# PR Artifacts
 walkthrough.md

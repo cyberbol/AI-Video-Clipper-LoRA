@@ -17,6 +17,9 @@ dependencies = [
     "soundfile",
     "requests",
     "tqdm",
-    "pyannote.audio",
+    "pyannote.audio==3.4.0",
+    "speechbrain==1.0.3",
+    "huggingface_hub",
+    "compressed-tensors",
 ]
 requires-python = ">=3.10"
