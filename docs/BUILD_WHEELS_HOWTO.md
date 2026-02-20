@@ -67,18 +67,18 @@ source .venv/bin/activate
 uv cache clean llama-cpp-python
 
 # Build using inline environment variables
-# IMPORTANT:Change these to suit!
+# IMPORTANT: Use -DLLAMA_AVX512=OFF to prevent "Illegal instruction" on non-AVX512 CPUs (like many Runpod nodes)
 export PATH=/usr/local/cuda/bin:$PATH
-export CUDACXX=/usr/local/cuda/bin/nvcc
+export CUDACXX=/usr/bin/nvcc
 export FORCE_CMAKE=1
-export CUDA_PATH=/usr/local/cuda-12.8 
-export CMAKE_ARGS="-DGGML_CUDA=on -DCMAKE_BUILD_TYPE=Release" 
-export CMAKE_BUILD_PARALLEL_LEVEL=4 
-pip wheel git+https://github.com/JamePeng/llama-cpp-python.git@main --no-deps --wheel-dir=wheels --no-cache-dir
+export CUDA_PATH=/usr/local/cuda
+export CMAKE_ARGS="-DGGML_CUDA=ON -DLLAMA_AVX512=OFF -DLLAMA_AVX2=ON -DCMAKE_BUILD_TYPE=Release"
+export CMAKE_BUILD_PARALLEL_LEVEL=8 
+pip wheel git+https://github.com/JamePeng/llama-cpp-python.git --no-deps --wheel-dir=wheels --no-cache-dir
 
-# Rename the artifact
-# Note: Ensure the filename matches the version generated in the /wheels folder
-mv wheels/llama_cpp_python-0.3.16-cp312-cp312-linux_x86_64.whl wheels/llama_cpp_python-0.3.16+cu128-cp312-cp312-linux_x86_64.whl
+# Rename the artifact to indicate the Universal/AVX2 status
+# The resulting wheel will be compatible with almost all x86_64 CPUs from the last 10 years.
+mv wheels/llama_cpp_python-0.3.26-cp312-cp312-linux_x86_64.whl wheels/llama_cpp_python-0.3.26+cu128-avx2-cp312-cp312-linux_x86_64.whl
 ```
 
 ---
