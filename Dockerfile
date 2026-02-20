@@ -1,6 +1,17 @@
 # FNGarvin - AI Video Clipper & LoRA Captioner Container
 # MIT License 2026
 
+###########################################################################################
+# ALERT - IMPORTANT! 
+# THIS IMAGE USES RUNTIME SELF-OPTIMIZATION.
+#
+# We cannot know at build-time which GPU architecture (e.g., Blackwell vs Standard) 
+# the user will have. Thus, this Dockerfile installs a standard universal wheel.
+#
+# AT RUNTIME (BOOT), the entrypoint.sh script detects the hardware and may 
+# hot-swap llama-cpp-python for a Blackwell-native build if CC >= 9.0 is found.
+###########################################################################################
+
 FROM pytorch/pytorch:2.10.0-cuda12.8-cudnn9-runtime
 
 # Set environment variables

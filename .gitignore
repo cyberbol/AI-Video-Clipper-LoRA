@@ -6,6 +6,7 @@ __pycache__/
 .venv/
 
 # Large Model Files
+models
 models/
 
 # Dataset Output

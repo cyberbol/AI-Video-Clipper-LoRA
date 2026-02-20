@@ -132,7 +132,7 @@ if not exist ".streamlit\config.toml" (
     ) > .streamlit\config.toml
 )
 
-echo.
+echo .
 echo [STEP 2/3] Installing Torch Engine (CUDA 12.8)...
 call .venv\Scripts\activate.bat
 uv pip install ^
@@ -141,18 +141,36 @@ uv pip install ^
     "torch==2.10.0+cu128" "torchvision==0.25.0+cu128" "torchaudio==2.10.0+cu128"
 
 echo [INFO] Syncing GGUF High-Performance Backend (CUDA 12.8)...
-:: GPU Architecture Detection
+REM GPU Architecture Detection
 set "IS_MODERN_GPU=false"
-for /f "tokens=1 delims=." %%a in ('nvidia-smi --query-gpu=compute_cap --format=noheader^,csv 2^>nul') do (
-    set /a "MAJOR_CAP=%%a"
-    echo [INFO] Detected NVIDIA GPU Compute Capability Major: !MAJOR_CAP!
-    if !MAJOR_CAP! GEQ 9 (
-        echo [INFO] Modern GPU detected (Hopper/Blackwell). Selecting optimized Blackwell wheel.
-        set "IS_MODERN_GPU=true"
-    )
+set "MAJOR_CAP="
+
+for /f "tokens=1 delims=." %%a in ('nvidia-smi --query-gpu=compute_cap --format=noheader 2^>nul') do (
+    set "MAJOR_CAP=%%a"
 )
 
-if "!IS_MODERN_GPU!"=="true" (
+REM If we got nothing from nvidia-smi, skip GPU-specific logic
+if not defined MAJOR_CAP goto gpu_detect_done
+
+echo [INFO] Detected NVIDIA GPU Compute Capability Major: %MAJOR_CAP%
+
+REM Check if MAJOR_CAP is numeric (avoid "N/A" or garbage)
+echo(%MAJOR_CAP% | findstr /r "^[0-9][0-9]*$" >nul
+if errorlevel 1 goto gpu_detect_done
+
+REM Now it's safe to compare numerically
+if %MAJOR_CAP% GEQ 9 (
+    echo [INFO] Modern GPU detected (Hopper/Blackwell). Selecting optimized Blackwell wheel.
+    set "IS_MODERN_GPU=true"
+)
+
+:gpu_detect_done
+
+if "%IS_MODERN_GPU%"=="false" (
+    echo [INFO] Standard GPU detected. Selecting standard universal wheel.
+)
+
+if "%IS_MODERN_GPU%"=="true" (
     set "WIN_WHEEL_URL=https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128_noavx512_Blackwell-cp310-cp310-win_amd64.whl"
     set "WIN_WHEEL_SHA256=6c13577479d21d51832b2b0f5a75dc64a76ed40ed3f97c9e46bdcf666e286b69"
     set "WHEEL_FILE=llama_cpp_python-0.3.26+cu128_noavx512_Blackwell-cp310-cp310-win_amd64.whl"
@@ -204,7 +222,7 @@ uv pip install --upgrade transformers accelerate huggingface_hub --link-mode har
 
 echo.
 echo [CHECK] Verifying GPU Acceleration...
-.venv\Scripts\python -c "from llama_cpp import llama_supports_gpu_offload; print(f'>>> GPU Offload Supported: {llama_supports_gpu_offload()}')"
+call .venv\Scripts\python -c "from llama_cpp import llama_supports_gpu_offload; print(f'>>> GPU Offload Supported: {llama_supports_gpu_offload()}')"
 
 echo.
 echo ======================================================================

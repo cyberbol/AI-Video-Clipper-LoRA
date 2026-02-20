@@ -107,7 +107,7 @@ echo "[INFO] Detected Python Version: $PY_VER"
 # GPU Architecture Detection
 IS_MODERN_GPU=false
 if command -v nvidia-smi &> /dev/null; then
-    COMPUTE_CAP=$(nvidia-smi --query-gpu=compute_cap --format=noheader,csv | head -n 1)
+    COMPUTE_CAP=$(nvidia-smi --query-gpu=compute_cap --format=noheader | head -n 1)
     echo "[INFO] Detected NVIDIA GPU Compute Capability: $COMPUTE_CAP"
     # Parse Major version
     MAJOR_CAP=$(echo "$COMPUTE_CAP" | cut -d'.' -f1)
@@ -132,15 +132,10 @@ if [ "$PY_VER" == "3.10" ]; then
         WHEEL_FILE="llama_cpp_python-0.3.26+cu128_noavx512-cp310-cp310-linux_x86_64.whl"
     fi
 elif [ "$PY_VER" == "3.12" ]; then
-    if [ "$IS_MODERN_GPU" = true ]; then
-        LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128_noavx512_Blackwell-cp312-cp312-linux_x86_64.whl"
-        LINUX_WHEEL_SHA256="fb26819470e13666112064f016411a74b4e192841bebe8ac7040e6b38d9ffac5"
-        WHEEL_FILE="llama_cpp_python-0.3.26+cu128_noavx512_Blackwell-cp312-cp312-linux_x86_64.whl"
-    else
-        LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128_noavx512-cp312-cp312-linux_x86_64.whl"
-        LINUX_WHEEL_SHA256="5fbfd0c8073286219cd56ce7c21538134c1fd1cebc5b215576d457bcb941dc1c"
-        WHEEL_FILE="llama_cpp_python-0.3.26+cu128_noavx512-cp312-cp312-linux_x86_64.whl"
-    fi
+    # Provided by FNGarvin for Runner - AVX2 Universal Build
+    LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128_noavx512-cp312-cp312-linux_x86_64.whl"
+    LINUX_WHEEL_SHA256="5fbfd0c8073286219cd56ce7c21538134c1fd1cebc5b215576d457bcb941dc1c"
+    WHEEL_FILE="llama_cpp_python-0.3.26+cu128_noavx512-cp312-cp312-linux_x86_64.whl"
 else
     echo "[ERROR] Unsupported Python Version for GPU Acceleration: $PY_VER. Only 3.10 and 3.12 supported."
     # Fail hard to prevent broken installs
