@@ -176,7 +176,7 @@ if "%IS_MODERN_GPU%"=="true" (
     set "WHEEL_FILE=llama_cpp_python-0.3.26+cu128_noavx512_Blackwell-cp310-cp310-win_amd64.whl"
 ) else (
     set "WIN_WHEEL_URL=https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128_noavx512-cp310-cp310-win_amd64.whl"
-    set "WIN_WHEEL_SHA256=f039c0b7f41236b95c4df83edad18976437a0f437201e1fb41e5743c450c8213"
+    set "WIN_WHEEL_SHA256=d199417da48fb5158390920aa100a0fac4a5c5139059a3e843dad6a7a6461977"
     set "WHEEL_FILE=llama_cpp_python-0.3.26+cu128_noavx512-cp310-cp310-win_amd64.whl"
 )
 

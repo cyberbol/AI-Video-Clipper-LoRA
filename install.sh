@@ -128,13 +128,13 @@ if [ "$PY_VER" == "3.10" ]; then
         WHEEL_FILE="llama_cpp_python-0.3.26+cu128_noavx512_Blackwell-cp310-cp310-linux_x86_64.whl"
     else
         LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128_noavx512-cp310-cp310-linux_x86_64.whl"
-        LINUX_WHEEL_SHA256="f2fb93f1f859e7ced807b2af2812056510e748de9633ec166b9371230e79836f"
+        LINUX_WHEEL_SHA256="1b9991085e6ed222f75ca15eace30e77b73122080116a21f99c9ce5d95d85c35"
         WHEEL_FILE="llama_cpp_python-0.3.26+cu128_noavx512-cp310-cp310-linux_x86_64.whl"
     fi
 elif [ "$PY_VER" == "3.12" ]; then
     # Provided by FNGarvin for Runner - AVX2 Universal Build
     LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128_noavx512-cp312-cp312-linux_x86_64.whl"
-    LINUX_WHEEL_SHA256="5fbfd0c8073286219cd56ce7c21538134c1fd1cebc5b215576d457bcb941dc1c"
+    LINUX_WHEEL_SHA256="9b74c2fef0ebad22164107718080621cdab9a8227641b354869b61eeaf14812d"
     WHEEL_FILE="llama_cpp_python-0.3.26+cu128_noavx512-cp312-cp312-linux_x86_64.whl"
 else
     echo "[ERROR] Unsupported Python Version for GPU Acceleration: $PY_VER. Only 3.10 and 3.12 supported."

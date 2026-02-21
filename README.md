@@ -30,14 +30,14 @@ Standard mode for captioning datasets of images using powerful, vision-capable L
 
 ### Prerequisites
 * **NVIDIA GPU** 
-    * Minimum 12GB VRAM recommended for vision-only mode
-    * 24GB recommended for audio+vision mode
+    * Ampere (RTX 3xxx) or newer
+    * Minimum 12GB VRAM recommended
     * MUST have driver support for CUDA 12.8 or higher
 * **Windows 10/11** or **Linux**
 
 ### 🪟 Windows (One-Click)
 1.  Run `Install.bat`.
-    * *This script uses `uv` to create an isolated, conflict-free environment and installs all dependencies including FFmpeg and Flash Attention.*
+    * *This script uses `uv` to create an isolated, conflict-free environment and installs all dependencies.*
 2.  Run `Run.bat` to start the app.
 
 ### 🐧 Linux / WSL
