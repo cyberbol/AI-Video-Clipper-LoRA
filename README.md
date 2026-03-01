@@ -2,9 +2,7 @@
 **State of the Art dataset preparation tool for Video LoRA training (LTX-2, HunyuanVideo).**
 *Now featuring Audio Intelligence, 3-Stage Pipeline, and Advanced Bulk Processing.*
 
----
-
----
+![Demo Image](images/demo.webp)
 
 ## 🎯 Core Features
 
@@ -132,4 +130,5 @@ We have completely rewritten the core engine to support multi-modal understandin
 <div align="center">
   <b>Licensed under MIT - Built for the Community</b>
 </div>
+
 
