@@ -73,6 +73,16 @@ For developers needing to support new CUDA versions or custom model architecture
 ## 📜 Changelog
 
 <details open>
+<summary><b>v5.4 - Gemma 4 & Qwen3-VL Support</b></summary>
+
+* **Gemma 4 12B and Qwen3-VL 8B** are now available as vision models, auto-downloaded the same way as the existing GGUF models. Gemma 4 is now the default.
+* The vision engine now selects the correct model-specific chat handler instead of a one-size-fits-all LLaVA template - fixes garbled/truncated captions that showed up on these newer models under the old generic handler.
+* Cleaned up the model picker (dropped the `GGUF:`/`Transformer:` label prefixes, reordered so the recommended models sort first).
+* Bumped the attested `llama-cpp-python` wheels to v0.3.44+cu128 to pick up current Gemma/Qwen support.
+* Assorted install/runtime hardening: fixed a silent CPU-fallback bug in GPU detection, a `cmd.exe` parser crash in `Install.bat`'s venv setup, and pinned `transformers`/`compressed-tensors` versions together to keep FP8 audio loading working.
+</details>
+
+<details>
 <summary><b>v5.2 - Blackwell Detection & Installer Hardening</b></summary>
 
 * **Fixed RTX 5090/Blackwell wheel detection on Windows:** a cmd.exe parser bug in `Install.bat` was silently falling back to the standard `llama-cpp-python` wheel on Blackwell GPUs instead of the CUDA-optimized build, with no error shown ([#13](https://github.com/cyberbol/AI-Video-Clipper-LoRA/issues/13)).

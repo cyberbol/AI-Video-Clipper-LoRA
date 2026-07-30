@@ -1,5 +1,5 @@
 # --------------------------------------------------------------------------------
-# AI Video Clipper & LoRA Captioner (v5.0 Staging)
+# AI Video Clipper & LoRA Captioner (v5.4)
 # 🏆 CREDITS: Cyberbol (Logic), FNGarvin (Engine), WildSpeaker (5090 Fix)
 # --------------------------------------------------------------------------------
 
@@ -16,6 +16,13 @@ except ImportError:
     # Basic fallbacks if patches.py is missing
     pass
 
+# Silence transformers' lazy-module __path__ deprecation spam (fires on every
+# vision/audio model load, once per deprecated image-processor alias - has to
+# be set before transformers gets imported anywhere else, including
+# transitively via whisperx/pyannote).
+import transformers
+transformers.utils.logging.set_verbosity_error()
+
 import streamlit as st
 import whisperx
 from moviepy import VideoFileClip, AudioFileClip
@@ -31,6 +38,7 @@ except ImportError:
     HAS_TKINTER = False
 import logging
 import shutil
+import subprocess
 
 # Suppress Streamlit's "missing ScriptRunContext" warning in threads
 logging.getLogger("streamlit.runtime.scriptrunner_utils.script_run_context").setLevel(logging.ERROR)
@@ -59,9 +67,9 @@ os.makedirs(MODELS_DIR, exist_ok=True)
 os.environ["HF_HOME"] = MODELS_DIR
 
 # --- 3. UI CONFIG ---
-st.set_page_config(page_title="AI Clipper v5.0", layout="wide")
+st.set_page_config(page_title="AI Clipper v5.4", layout="wide")
 st.title("👁️🐧👂 AI Video Clipper & LoRA Captioner")
-st.markdown("v5.0 | **[Cyberbol](https://github.com/cyberbol/)** (Project Creator) | **[FNG](https://github.com/FNGarvin/)** (Engine) | **WildSpeaker** (Has a 5090!)")
+st.markdown("v5.4 | **[Cyberbol](https://github.com/cyberbol/)** (Project Creator) | **[FNG](https://github.com/FNGarvin/)** (Engine) | **WildSpeaker** (Has a 5090!)")
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -79,38 +87,53 @@ app_mode = st.sidebar.selectbox("Choose Mode:", [
 ])
 
 # --- MODEL SELECTION (Radio Buttons) ---
-model_options = {
-    "GGUF: Gemma-3-12B (Next-Gen, 4-bit)": {
+# Dict insertion order = dropdown order (Python dicts + Streamlit selectbox
+# both preserve it), so the hardcoded entries are split around the
+# auto-discovery block below to land newly-scanned local models between
+# Gemma 4 and Qwen3-VL rather than at the end.
+KNOWN_GGUF_MODELS = {
+    "Gemma 4 12B (Q5_K_XL)": {
         "backend": "gguf",
-        "repo": "unsloth/gemma-3-12b-it-GGUF",
-        "model": "gemma-3-12b-it-IQ4_XS.gguf",
+        "repo": "unsloth/gemma-4-12b-it-GGUF",
+        "model": "gemma-4-12b-it-UD-Q5_K_XL.gguf",
         "projector": "mmproj-F16.gguf"
     },
-    "GGUF: Qwen3-VL-8B-Instruct (Q4_K_M)": {
+    "Qwen3-VL 8B Instruct (Q4_K_M)": {
         "backend": "gguf",
         "repo": "Qwen/Qwen3-VL-8B-Instruct-GGUF",
         "model": "Qwen3VL-8B-Instruct-Q4_K_M.gguf",
         "projector": "mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf"
     },
-    "Transformer: Qwen2-VL-7B (High Quality)": {
-        "backend": "transformers",
-        "id": "Qwen/Qwen2-VL-7B-Instruct"
+    "Gemma 3 12B (4-bit)": {
+        "backend": "gguf",
+        "repo": "unsloth/gemma-3-12b-it-GGUF",
+        "model": "gemma-3-12b-it-IQ4_XS.gguf",
+        "projector": "mmproj-F16.gguf"
     },
-    "Transformer: Qwen2-VL-2B (Fast)": {
-        "backend": "transformers",
-        "id": "Qwen/Qwen2-VL-2B-Instruct"
-    }
 }
+
+model_options = {"Gemma 4 12B (Q5_K_XL)": KNOWN_GGUF_MODELS["Gemma 4 12B (Q5_K_XL)"]}
 
 # Auto-Discovery
 local_ggufs = scan_local_gguf_models(MODELS_DIR)
 # Filter duplicates
-existing_ggufs = [m["model"] for m in model_options.values() if m.get("backend") == "gguf"]
+existing_ggufs = [m["model"] for m in KNOWN_GGUF_MODELS.values()]
 for label, config in local_ggufs.items():
     if config["model"] not in existing_ggufs:
         model_options[label] = config
 
-model_label = st.sidebar.selectbox("Vision Model:", list(model_options.keys()), index=2)
+model_options["Qwen3-VL 8B Instruct (Q4_K_M)"] = KNOWN_GGUF_MODELS["Qwen3-VL 8B Instruct (Q4_K_M)"]
+model_options["Gemma 3 12B (4-bit)"] = KNOWN_GGUF_MODELS["Gemma 3 12B (4-bit)"]
+model_options["Qwen2-VL 2B (Fast)"] = {
+    "backend": "transformers",
+    "id": "Qwen/Qwen2-VL-2B-Instruct"
+}
+model_options["Qwen2-VL 7B (High Quality)"] = {
+    "backend": "transformers",
+    "id": "Qwen/Qwen2-VL-7B-Instruct"
+}
+
+model_label = st.sidebar.selectbox("Vision Model:", list(model_options.keys()), index=0)
 SELECTED_MODEL = model_options[model_label]
 SELECTED_VISION_ID = SELECTED_MODEL.get("id", SELECTED_MODEL.get("model")) # Fallback ID
 
@@ -148,6 +171,21 @@ GEN_CONFIG = {
 def clear_vram():
     gc.collect()
     torch.cuda.empty_cache()
+
+def log_vram(label):
+    """Diagnostic: actual GPU-wide VRAM in use per nvidia-smi, not just
+    what torch.cuda tracks - catches non-PyTorch allocations (llama.cpp's
+    own CUDA buffers, CTranslate2, etc.) that torch's own counters miss."""
+    try:
+        nvidia_smi = shutil.which("nvidia-smi") or "/usr/lib/wsl/lib/nvidia-smi"
+        out = subprocess.check_output(
+            [nvidia_smi, "--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"],
+            timeout=5,
+        )
+        used, total = out.decode().strip().split(", ")
+        print(f"🩺 VRAM [{label}]: {used}MiB / {total}MiB used (GPU-wide)")
+    except Exception as e:
+        print(f"🩺 VRAM [{label}]: readout failed ({e})")
 
 # --- 5. MODEL LOADERS (MODULARIZED) ---
 def load_vision_engine():
@@ -193,7 +231,7 @@ def select_folder_dialog():
     return folder_path
 
 # =================================================================================================
-# MODE 1: VIDEO AUTO-CLIPPER (v5.0 Merged Logic)
+# MODE 1: VIDEO AUTO-CLIPPER
 # =================================================================================================
 if app_mode == "🎥 Video Auto-Clipper":
     project_name = st.text_input("Project Name (Optional)", value="")
@@ -246,6 +284,7 @@ if app_mode == "🎥 Video Auto-Clipper":
             if 'audio_engine' in st.session_state and st.session_state['audio_engine']:
                 st.session_state['audio_engine'].clear()
             clear_vram()
+            log_vram("after Phase 0 clean slate")
 
             # === PHASE 1: WHISPER X ===
             print(f"\n🚀 [Phase 1] Speech Analysis (WhisperX) started on {video_path}...")
@@ -314,6 +353,7 @@ if app_mode == "🎥 Video Auto-Clipper":
                 with st.spinner("Ensuring Audio Model (Downloader Active)..."):
                     download_model(SELECTED_AUDIO_ID, MODELS_DIR, log_callback=status_box.text)
 
+                log_vram("before Audio Engine load")
                 a_engine = load_audio_engine()
                 # Ensure loaded
                 if not a_engine.model:
@@ -397,7 +437,7 @@ if app_mode == "🎥 Video Auto-Clipper":
 
             video_f.close(); 
             clear_vram()
-            st.success("✅ DONE! v5.0 Pipeline Finished.")
+            st.success("✅ DONE! v5.4 Pipeline Finished.")
             end_ts = time.time(); mins, secs = divmod(end_ts - start_ts, 60)
             timer_placeholder.success(f"⏱️ Total Time: {int(mins)}m {int(secs)}s")
 
@@ -638,10 +678,6 @@ else:
         finally:
             if temp_img_dir and os.path.exists(temp_img_dir):
                 shutil.rmtree(temp_img_dir)
-
-st.markdown("---")
-st.markdown("<div style='text-align: center'><a href='https://github.com/cyberbol/AI-Video-Clipper-LoRA'>An Open Source Project</a></div>", unsafe_allow_html=True)
-
 
 st.markdown("---")
 st.markdown("<div style='text-align: center'><a href='https://github.com/cyberbol/AI-Video-Clipper-LoRA'>An Open Source Project</a></div>", unsafe_allow_html=True)

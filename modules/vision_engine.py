@@ -6,6 +6,7 @@
 
 import os
 import gc
+import json
 import torch
 import base64
 from threading import Thread
@@ -16,11 +17,27 @@ import tempfile
 
 # --- Lazy Imports for Heavy Libraries ---
 try:
-    from llama_cpp import Llama
-    from llama_cpp.llama_chat_format import Llava15ChatHandler
+    # llama_cpp prints "optional API unavailable" warnings via a bare print()
+    # (not the logging module, so no verbosity flag reaches it) for every
+    # ctypes symbol lookup that misses on this platform - fires once, here,
+    # at import time. Redirecting stdout is the only way to suppress it;
+    # ImportError still propagates normally since redirect_stdout doesn't
+    # swallow exceptions.
+    import contextlib
+    import io
+    with contextlib.redirect_stdout(io.StringIO()):
+        from llama_cpp import Llama
+        from llama_cpp.llama_chat_format import Llava15ChatHandler
+        try:
+            from llama_cpp.llama_chat_format import Gemma3ChatHandler, Gemma4ChatHandler, Qwen3VLChatHandler
+        except ImportError:
+            # Older llama-cpp-python builds may lack these model-specific
+            # handlers - fall back to the generic LLaVA-1.5 template for them.
+            Gemma3ChatHandler = Gemma4ChatHandler = Qwen3VLChatHandler = None
 except ImportError:
     Llama = None
     Llava15ChatHandler = None
+    Gemma3ChatHandler = Gemma4ChatHandler = Qwen3VLChatHandler = None
 
 IMPORT_ERROR = None
 try:
@@ -112,6 +129,23 @@ class GGUFVisionEngine:
         self.llm = None
         self.chat_handler = None
 
+    @staticmethod
+    def _resolve_chat_handler(model_file):
+        """Picks the model-specific chat handler (correct chat template +
+        stop tokens) instead of always falling back to the generic
+        Llava15ChatHandler, which feeds every model a USER:/ASSISTANT:
+        format it was never trained on - the direct cause of Gemma 4's
+        <|channel>thought<channel|> leaking into output and Qwen3-VL
+        returning empty completions."""
+        name = model_file.lower()
+        if Gemma4ChatHandler and "gemma-4" in name:
+            return Gemma4ChatHandler, {"enable_thinking": False}
+        if Gemma3ChatHandler and "gemma-3" in name:
+            return Gemma3ChatHandler, {}
+        if Qwen3VLChatHandler and "qwen3vl" in name:
+            return Qwen3VLChatHandler, {"image_min_tokens": 1024}
+        return Llava15ChatHandler, {}
+
     def load(self, log_callback=None):
         if Llama is None:
             raise ImportError("llama-cpp-python is missing. Install with CUDA support.")
@@ -136,21 +170,29 @@ class GGUFVisionEngine:
             if not os.path.exists(p_path): raise FileNotFoundError(f"Projector file missing: {p_path}")
 
         if p_path:
+            handler_cls, handler_kwargs = self._resolve_chat_handler(self.model_file)
             try:
-                self.chat_handler = Llava15ChatHandler(clip_model_path=p_path, verbose=False)
+                self.chat_handler = handler_cls(mmproj_path=p_path, verbose=False, **handler_kwargs)
             except Exception as e:
-                print(f"⚠️ Failed to init LlavaChatHandler: {e}")
+                print(f"⚠️ Failed to init {handler_cls.__name__}: {e}")
                 self.chat_handler = None
         else:
             self.chat_handler = None
 
-        self.llm = Llama(
-            model_path=m_path,
-            chat_handler=self.chat_handler,
-            n_ctx=self.n_ctx,  # Configurable
-            n_gpu_layers=self.n_gpu_layers, # Configurable
-            verbose=False    # Keep checking stdout clean
-        )
+        try:
+            self.llm = Llama(
+                model_path=m_path,
+                chat_handler=self.chat_handler,
+                n_ctx=self.n_ctx,  # Configurable
+                n_gpu_layers=self.n_gpu_layers, # Configurable
+                verbose=False    # Keep checking stdout clean
+            )
+        except Exception as e:
+            if log_callback: log_callback(f"❌ Load Failed: {e}")
+            self.llm = None
+            self.chat_handler = None
+            gc.collect()
+            raise RuntimeError(f"Failed to load {self.model_file}: {e}") from None
         if log_callback: log_callback("✅ GGUF Engine Ready.")
 
     def caption(self, content_path, content_type, trigger, instruction, gen_config=None, stream_callback=None):
@@ -193,7 +235,12 @@ class GGUFVisionEngine:
         content_list.append({"type": "text", "text": final_prompt})
 
         messages = [
-            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "system", "content": (
+                "You are a helpful assistant. Respond with a single flowing "
+                "paragraph of plain prose only - no JSON, no markdown code "
+                "fences, no headings, and no step-by-step reasoning or "
+                "<think> tags."
+            )},
             {"role": "user", "content": content_list}
         ]
         
@@ -246,9 +293,40 @@ class GGUFVisionEngine:
             with open(path, "rb") as f: return base64.b64encode(f.read()).decode("utf-8")
 
     def _post_process(self, text, trigger):
+        print(f"🔍 RAW MODEL OUTPUT (pre-strip):\n{text!r}\n")
+        text = self._strip_thinking_and_json(text)
         text = text.replace("**", "").replace("##", "").strip()
         if trigger and trigger.lower() not in text.lower():
             text = f"{trigger}, {text}"
+        return text
+
+    def _strip_thinking_and_json(self, text):
+        """Defensive cleanup for models (Qwen3-VL GGUF quants in particular)
+        that ignore the system prompt's plain-prose instruction and answer
+        with <think> blocks and/or a JSON object, sometimes truncated
+        mid-field by max_tokens."""
+        import re
+
+        text = re.sub(r"<think(?:ing)?>.*?</think(?:ing)?>", "", text, flags=re.IGNORECASE | re.DOTALL)
+        text = re.sub(r"^```(?:json)?\s*", "", text.strip())
+        text = re.sub(r"```\s*$", "", text).strip()
+
+        if text.startswith("{"):
+            try:
+                parsed = json.loads(text)
+            except json.JSONDecodeError:
+                # Truncated by max_tokens mid-field - recover whichever
+                # complete "key": "value" pairs exist rather than showing
+                # raw JSON syntax.
+                values = re.findall(r'"\s*:\s*"([^"]*)"', text)
+                if values:
+                    text = " ".join(v.strip() for v in values if v.strip())
+            else:
+                if isinstance(parsed, dict):
+                    text = " ".join(str(v).strip() for v in parsed.values() if str(v).strip())
+                else:
+                    text = str(parsed)
+
         return text
 
     def clear(self):
@@ -291,7 +369,15 @@ class TransformersVisionEngine:
             if log_callback: log_callback("✅ Transformers Engine Ready.")
         except Exception as e:
             if log_callback: log_callback(f"❌ Load Failed: {e}")
-            raise e
+            # Re-raising `e` directly would keep its original traceback alive,
+            # which pins every GPU tensor from_pretrained had already loaded
+            # before the failure - leaving VRAM stuck until the whole process
+            # exits. Raise a fresh exception instead so cleanup actually frees it.
+            self.model = None
+            self.processor = None
+            gc.collect()
+            torch.cuda.empty_cache()
+            raise RuntimeError(f"Failed to load {self.model_id}: {e}") from None
 
     def caption(self, content_path, content_type, trigger, instruction, gen_config=None, stream_callback=None):
         if not self.model: raise RuntimeError("Engine not loaded.")
@@ -354,8 +440,9 @@ class TransformersVisionEngine:
             full_text = ""
             for new_text in streamer:
                 full_text += new_text
-                stream_callback(self._post_process(full_text, trigger))
-            
+                # Stream raw accumulated text; only post-process once at the end
+                stream_callback(full_text)
+
             thread.join()
             return self._post_process(full_text, trigger)
         else:
@@ -365,9 +452,40 @@ class TransformersVisionEngine:
             return self._post_process(output_text, trigger)
 
     def _post_process(self, text, trigger):
+        print(f"🔍 RAW MODEL OUTPUT (pre-strip):\n{text!r}\n")
+        text = self._strip_thinking_and_json(text)
         text = text.replace("**", "").replace("##", "").strip()
         if trigger and trigger.lower() not in text.lower():
             text = f"{trigger}, {text}"
+        return text
+
+    def _strip_thinking_and_json(self, text):
+        """Defensive cleanup for models (Qwen3-VL GGUF quants in particular)
+        that ignore the system prompt's plain-prose instruction and answer
+        with <think> blocks and/or a JSON object, sometimes truncated
+        mid-field by max_tokens."""
+        import re
+
+        text = re.sub(r"<think(?:ing)?>.*?</think(?:ing)?>", "", text, flags=re.IGNORECASE | re.DOTALL)
+        text = re.sub(r"^```(?:json)?\s*", "", text.strip())
+        text = re.sub(r"```\s*$", "", text).strip()
+
+        if text.startswith("{"):
+            try:
+                parsed = json.loads(text)
+            except json.JSONDecodeError:
+                # Truncated by max_tokens mid-field - recover whichever
+                # complete "key": "value" pairs exist rather than showing
+                # raw JSON syntax.
+                values = re.findall(r'"\s*:\s*"([^"]*)"', text)
+                if values:
+                    text = " ".join(v.strip() for v in values if v.strip())
+            else:
+                if isinstance(parsed, dict):
+                    text = " ".join(str(v).strip() for v in parsed.values() if str(v).strip())
+                else:
+                    text = str(parsed)
+
         return text
 
     def clear(self):
@@ -383,7 +501,16 @@ def scan_local_gguf_models(models_dir):
     if not os.path.exists(models_dir): return discovered
     
     for root, dirs, files in os.walk(models_dir):
-        ggufs = [f for f in files if f.endswith(".gguf") and not f.lower().startswith("mmproj-")]
+        # mtp-* files are multi-token-prediction/draft weights that ride
+        # alongside a real model+projector pair (e.g. Gemma 4's
+        # mtp-gemma-4-12b-it.gguf) - not a loadable model on their own, so
+        # they'd otherwise show up as a bogus duplicate entry.
+        ggufs = [
+            f for f in files
+            if f.endswith(".gguf")
+            and not f.lower().startswith("mmproj-")
+            and not f.lower().startswith("mtp-")
+        ]
         projectors = [f for f in files if f.lower().startswith("mmproj-") and f.endswith(".gguf")]
         
         if ggufs and projectors:

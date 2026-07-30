@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableDelayedExpansion
-:: AI Video Clipper & LoRA Captioner - Windows Installer (v5.0 Staging)
+:: AI Video Clipper & LoRA Captioner - Windows Installer (v5.4)
 
 TITLE AI Clipper Installer - UV Edition
 color 0B
@@ -90,7 +90,12 @@ if "%RESET_VENV%"=="true" (
 )
 
 if not exist ".venv" (
-    uv venv .venv --python 3.10 --seed --managed-python --link-mode hardlink
+    REM --managed-python doesn't exist on uv 0.5.21 (what this bootstrap
+    REM leaves in place when uv is already on PATH). --python-preference
+    REM only-managed is the 0.5.21 equivalent: forces uv's own downloaded
+    REM interpreter so the venv matches our pinned llama-cpp-python wheel
+    REM ABI and never touches whatever Python is already on the user's system.
+    uv venv .venv --python 3.10 --seed --python-preference only-managed --link-mode hardlink
 )
 
 :: --------------------------------------------------------------------
@@ -215,7 +220,27 @@ uv pip install transformers accelerate huggingface_hub --link-mode hardlink
 
 echo.
 echo [CHECK] Verifying GPU Acceleration...
-call .venv\Scripts\python -c "from llama_cpp import llama_supports_gpu_offload; print(f'>>> GPU Offload Supported: {llama_supports_gpu_offload()}')"
+:: llama_supports_gpu_offload() checks a static build-time flag that no
+:: longer means anything on GGML_BACKEND_DL wheels (CUDA ships as a
+:: separate dynamically-loaded backend, not compiled into llama.dll) - it
+:: reports False unconditionally regardless of whether CUDA actually loads.
+:: Load the backends the same way Llama.__init__ does and check for a real
+:: GPU device instead.
+::
+:: llama_cpp prints a wall of native "loaded library from ..." / "optional
+:: API unavailable" / ggml backend-init noise on every fresh process. Send
+:: it to a log file and only surface the one result line; dump the full
+:: log if that line is missing (real failure). Avoids piping the quote-heavy
+:: python -c string through a nested for /f command (the exact class of
+:: cmd.exe parser fragility that caused issue #13).
+set "GPU_CHECK_LOG=%TEMP%\avc_gpu_check_%RANDOM%.log"
+call .venv\Scripts\python -c "import ctypes; from pathlib import Path; import llama_cpp.llama_cpp as llama_cpp_lib; from llama_cpp._ggml import ggml_backend_load_all_from_path, ggml_backend_dev_by_type; lib_dir = Path(llama_cpp_lib.__file__).resolve().parent / 'lib'; ggml_backend_load_all_from_path(ctypes.c_char_p(str(lib_dir).encode('utf-8'))); print(f'>>> GPU Offload Supported: {bool(ggml_backend_dev_by_type(1))}')" > "%GPU_CHECK_LOG%" 2>&1
+findstr /C:">>> GPU Offload Supported:" "%GPU_CHECK_LOG%"
+if errorlevel 1 (
+    echo WARNING: Llama GPU check failed to run
+    type "%GPU_CHECK_LOG%"
+)
+del "%GPU_CHECK_LOG%" >nul 2>&1
 
 echo.
 echo ======================================================================
@@ -246,9 +271,9 @@ exit /b 0
 :: Sets: WHEEL_FILE, WIN_WHEEL_URL, WIN_WHEEL_SHA256
 :: --------------------------------------------------------------------
 :resolve_wheel
-set "WIN_WHEEL_URL=https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.3-llama-deps/llama_cpp_python-0.3.26+cu128-cp310-cp310-win_amd64.whl"
-set "WIN_WHEEL_SHA256=f3e8512dd6e80f847189420bdeba657cc45d38d42cf025e2bababaa9f5188013"
-set "WHEEL_FILE=llama_cpp_python-0.3.26+cu128-cp310-cp310-win_amd64.whl"
+set "WIN_WHEEL_URL=https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.4-llama-deps/llama_cpp_python-0.3.44+cu128-cp310-cp310-win_amd64.whl"
+set "WIN_WHEEL_SHA256=96291f3af2ec492f6625f69b40b22a6996d53198f4d4739e9f55f9030817d128"
+set "WHEEL_FILE=llama_cpp_python-0.3.44+cu128-cp310-cp310-win_amd64.whl"
 
 set "MAJOR_CAP="
 for /f "tokens=1 delims=." %%a in ('nvidia-smi --query-gpu=compute_cap --format=csv^,noheader 2^>nul') do set "MAJOR_CAP=%%a"

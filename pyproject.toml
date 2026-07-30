@@ -5,8 +5,12 @@ description = "AI Video Clipper & LoRA Captioner"
 authors = [{ name = "Cyberbol" }]
 dependencies = [
     "qwen-vl-utils",
-    "accelerate",
-    "transformers>=4.45.0",
+    # transformers/accelerate/huggingface_hub/compressed-tensors pinned together:
+    # newer compressed-tensors mismatches the weight_scale key naming baked into
+    # mlinmg/Qwen-2-Audio-Instruct-dynamic-fp8, silently discarding the checkpoint's
+    # real FP8 dequant scales in favor of random re-init (garbage audio captions).
+    "accelerate==1.13.0",
+    "transformers==5.8.0",
     "streamlit",
     "moviepy",
     "pillow<11.0",
@@ -19,7 +23,7 @@ dependencies = [
     "tqdm",
     "pyannote.audio==3.4.0",
     "speechbrain==1.0.3",
-    "huggingface_hub",
-    "compressed-tensors",
+    "huggingface_hub==1.14.0",
+    "compressed-tensors==0.15.0.1",
 ]
 requires-python = ">=3.10"

@@ -30,7 +30,7 @@ set "PATH=%SCRIPT_DIR%fixtures;%PATH%"
 set "PASS_COUNT=0"
 set "FAIL_COUNT=0"
 
-set "EXPECT_WHEEL=llama_cpp_python-0.3.26+cu128-cp310-cp310-win_amd64.whl"
+set "EXPECT_WHEEL=llama_cpp_python-0.3.44+cu128-cp310-cp310-win_amd64.whl"
 
 echo ======================================================================
 echo   WHEEL RESOLUTION REGRESSION TEST (Install.bat --detect-only)

@@ -29,9 +29,9 @@ FAIL_COUNT=0
 
 PY_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')" 2>/dev/null || echo "3.10")
 if [ "$PY_VER" == "3.10" ]; then
-    EXPECT_WHEEL="llama_cpp_python-0.3.26+cu128-cp310-cp310-linux_x86_64.whl"
+    EXPECT_WHEEL="llama_cpp_python-0.3.44+cu128-cp310-cp310-linux_x86_64.whl"
 else
-    EXPECT_WHEEL="llama_cpp_python-0.3.26+cu128-cp312-cp312-linux_x86_64.whl"
+    EXPECT_WHEEL="llama_cpp_python-0.3.44+cu128-cp312-cp312-linux_x86_64.whl"
 fi
 
 echo "======================================================================"
